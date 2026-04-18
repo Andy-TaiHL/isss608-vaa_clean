@@ -9,6 +9,8 @@ website:
         menu:
           - text: "Exercise 1: Grammar of Graphics"
             href: hands-on_ex01.html
+          - text: "Exercise 2: Beyond ggplot2 Fundamentals"
+            href: hands-on_ex02.html
 
 format:
   html:
