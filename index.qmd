@@ -6,7 +6,7 @@ date-modified: last-modified
 
 <div style="background-color:#2C3E50; padding:20px; border-radius:10px; color:white; margin-bottom:20px;">
 **Welcome to Andy Tai's VAA Portfolio**  
-This site documents popular R commands in a systematic way to facilitate ease of use in creating powerful visual analytics and applications.
+This site organises commonly used R commands in a structured manner, making it easier to build powerful visual analytics and applications.
 </div>
 
 ## 👤 About Me
