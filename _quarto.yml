@@ -19,3 +19,4 @@ format:
     toc-depth: 3
     code-fold: true
     code-summary: "Show the code"
+    css: styles.css
