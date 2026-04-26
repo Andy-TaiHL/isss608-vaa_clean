@@ -1,7 +1,7 @@
 ---
 title: "Hands-on Exercise 3a: Programming Interactive Data Visualisation with R"
 author: "Andy Tai"
-date: "04/15/2026"
+date: "04/26/2026"
 date-modified: last-modified
 format: 
   html:
