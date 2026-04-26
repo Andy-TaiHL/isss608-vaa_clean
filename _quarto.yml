@@ -11,6 +11,8 @@ website:
             href: hands-on_ex01.html
           - text: "Exercise 2: Beyond ggplot2 Fundamentals"
             href: hands-on_ex02.html
+          - text: "Exercise 3a: Interactive Data Visualisation"
+            href: hands-on_ex03a.html
 
 format:
   html:
