@@ -6,3 +6,33 @@
   color: #ffffff !important;
   background-color: #2C3E50 !important;
 }
+
+div.callout-note {
+  background-color: #e8effc !important;
+  border-color: #627799 !important;
+}
+
+/* Tab styling */
+.panel-tabset .nav-tabs {
+  border-bottom: 2px solid #2C3E50;
+}
+
+.panel-tabset .nav-tabs .nav-link {
+  color: #2C3E50 !important;
+  font-weight: 600;
+  border: 1px solid #dee2e6;
+  background-color: #f8f9fa;
+  margin-right: 4px;
+}
+
+.panel-tabset .nav-tabs .nav-link.active {
+  color: #ffffff !important;
+  background-color: #2C3E50 !important;
+  border-color: #2C3E50 !important;
+  font-weight: 700;
+}
+
+.panel-tabset .nav-tabs .nav-link:hover {
+  color: #ffffff !important;
+  background-color: #5D6D7E !important;
+}
