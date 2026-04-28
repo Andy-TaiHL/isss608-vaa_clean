@@ -250,5 +250,47 @@
     "title": "Hands-on Exercise 3a: Programming Interactive Data Visualisation with R",
     "section": "6 References",
     "text": "6 References\n\nKam, T.S. (2023). Programming Interactive Data Visualisation with R.\n\nggiraph\n\nThis link provides online version of the reference guide and several useful articles. Use this link to download the pdf version of the reference guide.\nHow to Plot With Ggiraph\nInteractive map of France with ggiraph\nCustom interactive sunbursts with ggplot in R\nThis link provides code example on how ggiraph is used to interactive graphs for Swiss Olympians - the solo specialists.\n\nplotly for R\n\nGetting Started with Plotly in R\nA collection of plotly R graphs are available via this link.\nCarson Sievert (2020) Interactive web-based data visualization with R, plotly, and shiny, Chapman and Hall/CRC is the best resource to learn plotly for R. The online version is available via this link\nPlotly R Figure Reference provides a comprehensive discussion of each visual representations.\nPlotly R Library Fundamentals is a good place to learn the fundamental features of Plotly’s R API.\nGetting Started\nVisit this link for a very interesting implementation of gganimate by your senior.\nBuilding an animation step-by-step with gganimate.\nCreating a composite gif with multiple gganimate panels"
+  },
+  {
+    "objectID": "hands-on_ex03b.html",
+    "href": "hands-on_ex03b.html",
+    "title": "Hands-on Exercise 3b: Programming Animated Statistical Graphics with R",
+    "section": "",
+    "text": "When telling a visually-driven data story, animated graphics tend to attract the interest of the audience and make deeper impression than static graphics. In this hands-on exercise, we will learn how to create animated data visualisation by using gganimate and plotly r packages. At the same time, we will also learn how to:\n\nreshape data by using tidyr package, and\nprocess, wrangle and transform data by using dplyr package."
+  },
+  {
+    "objectID": "hands-on_ex03b.html#overview",
+    "href": "hands-on_ex03b.html#overview",
+    "title": "Hands-on Exercise 3b: Programming Animated Statistical Graphics with R",
+    "section": "",
+    "text": "When telling a visually-driven data story, animated graphics tend to attract the interest of the audience and make deeper impression than static graphics. In this hands-on exercise, we will learn how to create animated data visualisation by using gganimate and plotly r packages. At the same time, we will also learn how to:\n\nreshape data by using tidyr package, and\nprocess, wrangle and transform data by using dplyr package."
+  },
+  {
+    "objectID": "hands-on_ex03b.html#getting-started",
+    "href": "hands-on_ex03b.html#getting-started",
+    "title": "Hands-on Exercise 3b: Programming Animated Statistical Graphics with R",
+    "section": "2 Getting Started",
+    "text": "2 Getting Started"
+  },
+  {
+    "objectID": "hands-on_ex03b.html#animated-data-visualisation-gganimate-methods",
+    "href": "hands-on_ex03b.html#animated-data-visualisation-gganimate-methods",
+    "title": "Hands-on Exercise 3b: Programming Animated Statistical Graphics with R",
+    "section": "3 Animated Data Visualisation: gganimate methods",
+    "text": "3 Animated Data Visualisation: gganimate methods\n\n(a) Static bubble plot(b) Animated bubble plot(c) Animated line graph"
+  },
+  {
+    "objectID": "hands-on_ex03b.html#animated-data-visualisation-plotly",
+    "href": "hands-on_ex03b.html#animated-data-visualisation-plotly",
+    "title": "Hands-on Exercise 3b: Programming Animated Statistical Graphics with R",
+    "section": "4 Animated Data Visualisation: plotly",
+    "text": "4 Animated Data Visualisation: plotly\n\n(a) Building an animated bubble plot: ggplotly() method(b) Building an animated bubble plot: plot_ly() method"
+  },
+  {
+    "objectID": "hands-on_ex03b.html#references",
+    "href": "hands-on_ex03b.html#references",
+    "title": "Hands-on Exercise 3b: Programming Animated Statistical Graphics with R",
+    "section": "5. References",
+    "text": "5. References"
   }
 ]

@@ -1,0 +1,58 @@
+---
+title: "Hands-on Exercise 3b: Programming Animated Statistical Graphics with R"
+date: "04/28/2026"
+date-modified: last-modified
+format: 
+  html:
+    theme: lumen
+    toc: true
+    toc-depth: 3
+    number-sections: false
+editor: visual
+execute: 
+  eval: true
+  echo: true
+  warning: false
+  message: false
+  freeze: true
+---
+
+## 1 Overview
+
+When telling a visually-driven data story, animated graphics tend to attract the interest of the audience and make deeper impression than static graphics. In this hands-on exercise, we will learn how to create animated data visualisation by using **gganimate** and **plotly r** packages. At the same time, we will also learn how to:
+
+(i) reshape data by using **tidyr** package, and
+
+(ii) process, wrangle and transform data by using **dplyr** package.
+
+### 1.1 Basic Concepts of animation
+
+### 1.2 Terminology
+
+## 2 Getting Started
+
+## 3 Animated Data Visualisation: gganimate methods
+
+:::: {.panel-tabset}
+### (a) Static bubble plot
+
+### (b) Animated bubble plot
+::: {.panel-tabset}
+
+
+:::
+### (c) Animated line graph
+
+
+::::
+
+## 4 Animated Data Visualisation: plotly
+
+:::: {.panel-tabset}
+## (a) Building an animated bubble plot: ggplotly() method
+
+## (b)  Building an animated bubble plot: plot_ly() method
+
+::::
+
+## 5. References
