@@ -36,3 +36,16 @@ div.callout-note {
   color: #ffffff !important;
   background-color: #5D6D7E !important;
 }
+
+/* ========================================
+   Package table for hands-on_ex03b.qmd
+   ======================================== */
+.package-table table {
+  width: 100%;
+}
+
+.package-table table th:first-child,
+.package-table table td:first-child {
+  width: 20%;
+  min-width: 150px;
+}
