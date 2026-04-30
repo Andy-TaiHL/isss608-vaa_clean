@@ -13,6 +13,8 @@ website:
             href: hands-on_ex02.html
           - text: "Exercise 3a: Interactive Data Visualisation"
             href: hands-on_ex03a.html
+          - text: "Exercise 3b: Animated Statistical Graphics"
+            href: hands-on_ex03b.html
 
 format:
   html:
