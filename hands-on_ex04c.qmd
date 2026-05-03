@@ -1,5 +1,5 @@
 ---
-title: "hands-on_ex04c"
+title: "Hands-on Exercise 4c: Visualising Uncertainty"
 author: "Andy Tai"
 date: "05/03/2026"
 date-modified: last-modified
