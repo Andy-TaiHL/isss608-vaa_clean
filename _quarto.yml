@@ -19,6 +19,8 @@ website:
             href: hands-on_ex04a.html
           - text: "Exercise 4b: Visualising Statistical Analysis"
             href: hands-on_ex04b.html
+          - text: "Exercise 4c: Visualising Uncertainty"
+            href: hands-on_ex04c.html
 
 format:
   html:
