@@ -15,6 +15,8 @@ website:
             href: hands-on_ex03a.html
           - text: "Exercise 3b: Animated Statistical Graphics"
             href: hands-on_ex03b.html
+          - text: "Exercise 4a: Visualising Distribution"
+            href: hands-on_ex04a.html
 
 format:
   html:
