@@ -1,0 +1,494 @@
+---
+title: "Hands-on Exercise 4b: Visualising Statistical Analysis"
+author: "Andy Tai"
+date: "05/03/2026"
+date-modified: last-modified
+format: 
+  html:
+    theme: lumen
+    toc: true
+    toc-depth: 3
+    number-sections: false
+editor: source
+execute: 
+  eval: true
+  echo: true
+  warning: false
+  message: false
+  freeze: true
+---
+
+## 1 Learning Outcome
+This hands-on exercise focuses on:
+
+* ggstatsplot package to create visual graphics with rich statistical information,
+* performance package to visualise model diagnostics, and
+* parameters package to visualise model parameters
+
+## 2 Getting Started
+
+:::: {.panel-tabset}
+### Installing and loading libraries
+* Use the pacman package to check, install and launch the R packages **ggstatplot** and **tidyverse**.
+* [ggstatsplot](https://www.indrapatil.com/ggstatsplot/) is an extension of [ggplot2](https://ggplot2.tidyverse.org/) package for creating graphics with details from statistical tests included in the information-rich plots themselves.
+```{r}
+#| message: false
+#| warning: false
+pacman::p_load(ggstatsplot, tidyverse, nortest, ggdist)
+```
+
+
+### Importing data
+* The code chunk below uses [read_csv()](https://readr.tidyverse.org/reference/read_delim.html) of **readr** package to import Exam_data.csv data file into R and save it as an tibble data frame called `exam_data`.
+
+```{r}
+exam <- read_csv("data/Exam_data.csv")
+```
+
+### Understanding the data
+* The data is a tibble dataframe and contains 322 observations across 7 attributes.
+```{r}
+glimpse(exam)
+```
+
+### Converting data types
+```{r}
+col <- c("CLASS", "GENDER", "RACE")
+
+exam <- exam %>% 
+  mutate(across(col, as.factor)) %>% 
+  mutate(ID = as.character(ID))
+```
+
+::::
+
+## 3 Various Statistical Tests
+
+| Test | What it Measures | Function |
+|:---|:---|:---|
+| One-sample | Is this sample's mean/median **different from a known value**? | `gghistostats()` |
+| Two-sample | Are these **two groups** different from each other? | `ggbetweenstats()` |
+| ANOVA | Are **any of these groups** different from each other? | `ggbetweenstats()` |
+| Correlation | Is there a **linear relationship** between two continuous variables? | `ggscatterstats()` |
+| Association | Is there a **dependency** between two categorical variables? | `ggbarstats()` |
+
+: {tbl-colwidths="[15,55,30]"}
+
+### 3.1 Compare means/medians
+:::: {.panel-tabset}
+### (a) 1-sample tests
+| Type Argument | Test Used | Nature | When to Use |
+|:---|:---|:---|:---|
+| `type = "parametric"` | One-sample t-test | Parametric | When data follows normal distribution — tests against **mean** |
+| `type = "nonparametric"` | One-sample Wilcoxon signed rank test | Non-parametric | When data does **not** follow normal distribution — tests against **median** |
+| `type = "robust"` | One-sample robust t-test | Robust | When data has outliers — uses **trimmed mean** |
+| `type = "bayes"` | Bayes Factor test | Bayesian | When you want to quantify evidence **in favour of** null or alternative hypothesis |
+
+: {tbl-colwidths="[20,25,15,40]"}
+
+
+
+::: {.panel-tabset}
+#### (i) 1-sample t-test
+$H_0$: $\mu = 60$ (English scores mean is equal to 60)
+
+$H_1$: $\mu \neq 60$ (English scores mean is not equal to 60)
+
+```{r}
+# Parametric (t-test)
+set.seed(1234)
+gghistostats(
+  data = exam,
+  x = ENGLISH,
+  type = "parametric",
+  test.value = 60,
+  xlab = "English scores",
+  title = "Parametric: One-sample t-test",
+  bin.args = list(fill = "seagreen", 
+                  color = "white",
+                  alpha = 0.8)
+) + theme_bw()
+```
+
+#### (ii) 1-sample Wilcoxon signed rank test
+$H_0$: $\mu = 60$ (English scores mean is equal to 60)
+
+$H_1$: $\mu \neq 60$ (English scores mean is not equal to 60)
+
+```{r}
+# Non-parametric (Wilcoxon)
+set.seed(1234)
+gghistostats(
+  data = exam,
+  x = ENGLISH,
+  type = "nonparametric",
+  test.value = 60,
+  xlab = "English scores",
+  title = "Non-parametric: Wilcoxon signed rank test",
+  bin.args = list(fill = "seagreen", 
+                  color = "white",
+                  alpha = 0.8)
+) + theme_bw()
+```
+
+#### (iii) 1-sample robust t-test
+
+$H_0$: $\mu = 60$ (English scores mean is equal to 60)
+
+$H_1$: $\mu \neq 60$ (English scores mean is not equal to 60)
+
+```{r}
+# Robust
+set.seed(1234)
+gghistostats(
+  data = exam,
+  x = ENGLISH,
+  type = "robust",
+  test.value = 60,
+  xlab = "English scores",
+  title = "Robust: One-sample robust t-test",
+  bin.args = list(fill = "seagreen", 
+                  color = "white",
+                  alpha = 0.8)
+) + theme_bw()
+```
+
+#### (iv) Bayes Factor test
+
+* A Bayes factor is the ratio of the likelihood of one particular hypothesis to the likelihood of another. It can be interpreted as a measure of the strength of evidence in favor of one theory among two competing theories.
+
+* That’s because the Bayes factor gives us a way to evaluate the data in favor of a null hypothesis, and to use external information to do so. It tells us what the weight of the evidence is in favor of a given hypothesis.
+
+* When we are comparing two hypotheses: H1 (the alternate hypothesis) and H0 (the null hypothesis), the Bayes Factor is often written as B10, i.e.,
+$$
+B_{10} = \frac{P(Data | H_1)}{P(Data | H_0)}
+$$
+* The [Schwarz criterion](https://www.statisticshowto.com/bayesian-information-criterion/) is one of the easiest ways to calculate rough approximation of the Bayes Factor.
+
+| If $B_{10}$ is... | Then you have... |
+|:---|:---|
+| $> 100$ | Extreme evidence for $H_1$ |
+| $30 - 100$ | Very strong evidence for $H_1$ |
+| $10 - 30$ | Strong evidence for $H_1$ |
+| $3 - 10$ | Moderate evidence for $H_1$ |
+| $1 - 3$ | Anecdotal evidence for $H_1$ |
+| $1$ | No evidence |
+| $1/3 - 1$ | Anecdotal evidence for $H_0$ |
+| $1/3 - 1/10$ | Moderate evidence for $H_0$ |
+| $1/10 - 1/30$ | Strong evidence for $H_0$ |
+| $1/30 - 1/100$ | Very strong evidence for $H_0$ |
+| $< 1/100$ | Extreme evidence for $H_0$ |
+
+: {tbl-colwidths="[30,70]"}
+
+$H_0$: $\mu = 60$
+
+$H_1$: $\mu \neq 60$
+
+$$B_{10} = \frac{P(Data | H_1)}{P(Data | H_0)}$$
+
+```{r}
+# Bayes
+set.seed(1234)
+gghistostats(
+  data = exam,
+  x = ENGLISH,
+  type = "bayes",
+  test.value = 60,
+  xlab = "English scores",
+  title = "Bayesian: Bayes Factor test",
+  bin.args = list(fill = "seagreen", 
+                  color = "white",
+                  alpha = 0.8)
+) + theme_bw()
+```
+:::
+
+### (b) 2-sample test
+
+| Type Argument | Test Used | Nature |
+|:---|:---|:---|
+| `type = "parametric"` | Welch's t-test | Parametric |
+| `type = "nonparametric"` or `type = "np"` | Wilcoxon rank-sum test (Mann-Whitney) | Non-parametric |
+| `type = "robust"` | Yuen's trimmed means t-test | Robust |
+| `type = "bayes"` | Bayesian t-test | Bayesian |
+
+: {tbl-colwidths="[30,45,25]"}
+
+::: {.panel-tabset}
+#### (i) Welch's t-test
+$H_0$: $\mu_{Female} = \mu_{Male}$ (Mean Math scores of Female and Male are equal)
+
+$H_1$: $\mu_{Female} \neq \mu_{Male}$ (Mean Math scores of Female and Male are not equal)
+
+```{r}
+# Parametric (Welch's t-test)
+ggbetweenstats(
+  data = exam,
+  x = GENDER,
+  y = MATHS,
+  type = "parametric",
+  title = "Parametric: Welch's t-test",
+  messages = FALSE,
+  palette = "Set2",
+  package = "RColorBrewer"
+) + theme_bw()
+```
+
+#### (ii) Wilcoxon rank-sum test
+
+$H_0$: $\mu_{Female} = \mu_{Male}$ (Mean Math scores of Female and Male are equal)
+
+$H_1$: $\mu_{Female} \neq \mu_{Male}$ (Mean Math scores of Female and Male are not equal)
+
+```{r}
+# Non-parametric (Wilcoxon rank-sum)
+ggbetweenstats(
+  data = exam,
+  x = GENDER,
+  y = MATHS,
+  type = "nonparametric",
+  title = "Non-parametric: Wilcoxon rank-sum test",
+  messages = FALSE,
+  palette = "Set2",
+  package = "RColorBrewer"
+) + theme_bw()
+```
+
+#### (iii) Yuen's trimmed means t-test
+
+$H_0$: $\mu_{Female} = \mu_{Male}$ (Mean Math scores of Female and Male are equal)
+
+$H_1$: $\mu_{Female} \neq \mu_{Male}$ (Mean Math scores of Female and Male are not equal)
+
+```{r}
+# Robust (Yuen's trimmed means)
+ggbetweenstats(
+  data = exam,
+  x = GENDER,
+  y = MATHS,
+  type = "robust",
+  title = "Robust: Yuen's trimmed means t-test",
+  messages = FALSE,
+  palette = "Set2",
+  package = "RColorBrewer"
+) + theme_bw()
+```
+
+#### (iv) Bayesian t-test
+$H_0$: $\mu_{Female} = \mu_{Male}$
+
+$H_1$: $\mu_{Female} \neq \mu_{Male}$
+
+$$B_{10} = \frac{P(Data | H_1)}{P(Data | H_0)}$$
+
+```{r}
+# Bayesian
+ggbetweenstats(
+  data = exam,
+  x = GENDER,
+  y = MATHS,
+  type = "bayes",
+  title = "Bayesian: Bayesian t-test",
+  messages = FALSE,
+  palette = "Set2",
+  package = "RColorBrewer"
+) + theme_bw()
+```
+:::
+
+### (c) 1-way ANOVA
+
+$H_0$: $\mu_{Chinese} = \mu_{Indian} = \mu_{Malay} = \mu_{Others}$ (Mean English scores of all races are equal)
+
+$H_1$: \text{At least one } $\mu$ \text{ is different} (Not all mean English scores are equal)
+
+```{r}
+ggbetweenstats(
+  data = exam,
+  x = RACE, 
+  y = ENGLISH,
+  type = "p",
+  mean.ci=TRUE,
+  pairwise.comparisons = TRUE, 
+  pairwise.display = "s",  # 'ns': shows only non-sig, 's': shows only sig, 'all': both 
+  p.adjust.method = "fdr",
+  messages = FALSE
+) +
+  theme_bw()  
+```
+::::
+
+
+### 3.2 Correlation
+
+* In the code chunk below, [ggscatterstats()](https://www.indrapatil.com/ggstatsplot/reference/ggscatterstats.html) is used to build a visual for Significant Test of Correlation between Maths scores and English scores.
+* `ggscatterstats()` doesn't have a direct `color` argument for the points. Use point.args instead to pass colour settings to the underlying `geom_point()`
+
+
+$H_0$: $\rho = 0$ (There is no correlation between Math and English scores)
+
+$H_1$: $\rho \neq 0$ (There is a significant correlation between Math and English scores)
+
+```{r}
+ggscatterstats(
+  data = exam,
+  x = MATHS,
+  y = ENGLISH,
+  type = "nonparametric",
+  marginal = FALSE,
+  point.args = list(color = "rosybrown",
+                    size = 2,
+                    alpha = 0.6)
+) + theme_bw()
+```
+
+### 3.3 Association
+
+$H_0$: MATHS_bins and GENDER are independent
+
+$H_1$: MATHS_bins and GENDER are not independent
+
+* we need to mutate the data into bins first using `cut`.
+* From the results, since p-value > 0.05 thus we have not enough statistical evidence to reject the null hypothesis that there is not association between the math_bin and gender variables.
+```{r}
+
+exam1 <- exam %>% 
+  mutate(MATHS_bins = 
+           cut(MATHS, 
+               breaks = c(0,60,75,85,100))
+)
+
+ggbarstats(exam1,
+            x=MATHS_bins,
+            y=GENDER) +
+  
+  theme_bw() 
+
+```
+
+
+
+## 4 Visualising Models
+
+* Import libraries and data (`ToyotaCorolla.csv`)
+```{r}
+pacman::p_load(performance, parameters, see)
+car_resale <- read_csv("data/ToyotaCorolla.csv")
+```
+
+### 4.1 Multiple Regression Model using lm()
+
+* The code chunk below is used to calibrate a multiple linear regression model by using lm() of Base Stats of R.
+
+```{r}
+## transform features
+car_resale <- car_resale %>%
+  mutate(
+    FuelType = as.factor(FuelType),
+    MetColor = as.factor(MetColor),
+    Automatic = as.factor(Automatic),
+    Doors = as.factor(Doors)
+  )
+
+## build model
+model <- lm(Price ~ Age + 
+              KM + 
+              FuelType +
+              HP +
+              MetColor +
+              Automatic +
+              CC +
+              Doors +
+              Weight,
+            data = car_resale)
+```
+
+### 4.2 Model Diagnostics Visualisations
+
+:::: {.panel-tabset}
+
+### (a) multicollinearity
+
+* In the code chunk, [check_collinearity()](https://easystats.github.io/performance/reference/check_collinearity.html) of [performance](https://easystats.github.io/performance/) package.
+```{r}
+check_collinearity(model)
+```
+
+* render into chart
+```{r}
+check_c <- check_collinearity(model)
+plot(check_c) + 
+  theme_bw() 
+```
+
+### (b) normality
+
+```{r}
+plot(check_normality(model)) + theme_bw()
+```
+
+### (c) heteroscedasticity
+In the code chunk, [check_heteroscedasticity()](https://easystats.github.io/performance/reference/check_heteroscedasticity.html) of [performance](https://easystats.github.io/performance/) package.
+
+Heteroscedasticity refers to a situation where the variance of the **errors (or residuals)** in the linear regression model is not constant across different levels of the predictor variable(s).
+
+```{r}
+plot(check_heteroscedasticity(model)) + theme_bw()
+```
+
+### (d) complete check
+
+* We can also perform the complete check by using [check_model()](https://easystats.github.io/performance/reference/check_model.html).
+```{r}
+#| fig-width: 14
+#| fig-height: 12
+check_model(model)
+```
+
+:::: 
+
+
+### 4.3 Regression Parameters Visualisations
+:::: {.panel-tabset}
+
+### (a) see() method
+
+In the code below, `plot()` of **see** package and `parameters()` of **parameters** package are used to visualise the parameters of a regression model.
+
+```{r}
+plot(parameters(model)) + theme_bw()
+```
+
+### (b) ggcoefstats() method
+
+In the code below, [ggcoefstats()](https://www.indrapatil.com/ggstatsplot/reference/ggcoefstats.html) of ggstatsplot package to visualise the parameters of a regression model.
+
+* `only.significant = TRUE` shows labels only for variables with p-value < 0.05, reducing clutter significantly!
+
+*  Alternatively, we can replace `only.significant = TRUE`with `stats.labels = FALSE`. This removes the cluttered statistical annotation boxes and just shows the coefficient dots and confidence interval lines cleanly.
+* Removing non-significant variables can improve the colour contrast of the labels that would otherwise be scaled according to the significance level.
+
+```{r}
+model2 <- lm(Price ~ Age + 
+               KM + 
+               FuelType +
+               HP +
+               CC +
+               Weight,
+             data = car_resale)
+
+ggcoefstats(model2, 
+            output = "plot",
+            stats.label.args = list(size = 3)) +   
+  theme_bw() +
+  theme(axis.text = element_text(size = 12),
+        axis.title = element_text(size = 12))
+```
+
+::::
+
+
+## 5 References
+
+* Kam, T.S. (2023). [Visual Statistical Analysis](https://r4va.netlify.app/chap10). 
