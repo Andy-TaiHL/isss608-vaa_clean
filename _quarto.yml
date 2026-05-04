@@ -21,6 +21,8 @@ website:
             href: hands-on_ex04b.html
           - text: "Exercise 4c: Visualising Uncertainty"
             href: hands-on_ex04c.html
+          - text: "Exercise 4d: Funnel Plots for Fair Comparisons"
+            href: hands-on_ex04d.html
 
 format:
   html:
