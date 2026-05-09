@@ -1,0 +1,393 @@
+---
+title: "Hands-on Exercise 5a: Creating Ternary Plot with R"
+author: "Andy Tai"
+date: "05/09/2026"
+date-modified: last-modified
+format: 
+  html:
+    theme: lumen
+    toc: true
+    toc-depth: 3
+    number-sections: false
+editor: source
+execute: 
+  eval: true
+  echo: true
+  warning: false
+  message: false
+  freeze: true
+---
+
+## 1 Overview
+
+Ternary plots are graphical tools used to visualise the distribution and variation of compositional data made up of three components. Examples include the proportions of young, economically active, and elderly populations, or the composition of sand, silt, and clay in soil samples. The plot is represented as a triangle scaled from 0 to 1 along each side, where each side corresponds to one of the three components. A data point is positioned such that its perpendicular distance to each side reflects the value of the respective component.
+
+In this hands-on exercise, we will learn how to create ternary plots programmatically in R to analyse and visualise the population structure of Singapore.
+
+The exercise is organised into four main steps:
+
+1. Install and load the **tidyverse** and **ggtern** packages.
+2. Create three new measures using the `mutate()` function from the **dplyr** package.
+3. Construct a static ternary plot using the `ggtern()` function from the **ggtern** package.
+4. Create an interactive ternary plot using the `plot_ly()` function from the **Plotly R** package.
+
+
+## 2 Getting Started
+
+:::: {.panel-tabset}
+
+### Installing & Launching R Packages
+
+In this exercise, we will use two main R packages:
+
+* [ggtern](https://cran.r-project.org/web/packages/ggtern/index.html), an extension of **ggplot2** designed specifically for creating ternary diagrams. We will use this package to build static ternary plots.
+* [Plotly R](https://plotly.com/r/), an R package for developing interactive web-based visualisations using Plotly’s JavaScript graphing library, **plotly.js**. We will use the `ggplotly()` function to convert **ggplot2** graphics into interactive Plotly objects.
+
+```{r}
+pacman::p_load(plotly, tidyverse, ggtern, tricolore, gganimate)
+```
+
+### Importing Data
+
+The original data is obtained from Singapore Residents by Planning AreaSubzone, Age Group, Sex and Type of Dwelling, June 2000-2025 off the [Singstat](https://www.singstat.gov.sg/) website.
+
+```{r}
+#Reading the data into R environment
+pop_data <- read_csv("data/respopagesextod2025.csv") 
+```
+
+### Preparing Data
+
+The code chunk below performs several tasks:
+
+* Uses `as.character()` to convert the Year variable into the character data type.
+* Uses `spread()` to transform key-value pairs into multiple columns, similar to a simpler version of `pivot_wider()`.
+* Syntax: `spread(data, key, value)`, where:
+  * `data` refers to the data frame,
+  * `key` specifies the column whose values will become new column names, and
+  * `value` specifies the column containing the values to populate the new columns.
+* Uses the `mutate()` function from the `dplyr` package to create three new measures: `young`, `active`, and `old`.
+
+```{r}
+agpop_mutated <- pop_data %>%
+  filter(Sex == "Males") %>%
+  spread(AG, Pop) %>%
+  mutate(
+    YOUNG  = rowSums(select(., `0_to_4`, `5_to_9`, `10_to_14`, `15_to_19`, `20_to_24`), na.rm = TRUE),
+    ACTIVE = rowSums(select(., `25_to_29`, `30_to_34`, `35_to_39`, `40_to_44`, `45_to_49`,`50_to_54`, `55_to_59`, `60_to_64`), na.rm = TRUE),
+    OLD    = rowSums(select(., `65_to_69`, `70_to_74`, `75_to_79`, `80_to_84`, 
+                               `85_to_89`, `90_and_over`), na.rm = TRUE),
+    TOTAL  = YOUNG + ACTIVE + OLD
+  ) %>%
+  filter(Time == 2025) %>%
+  filter(TOTAL > 0)
+
+head(agpop_mutated)
+```
+
+::::
+
+## 3 Plotting Ternary Diagram with R
+
+:::: {.panel-tabset}
+
+### (a) Basic Plot
+Here, we use `ggtern()` function of **ggtern** package to create a simple ternary plot. We also style it with color and title.
+
+```{r}
+ggtern(data = agpop_mutated,
+       aes(x = YOUNG, y = ACTIVE, z = OLD, colour = YOUNG)) +
+  geom_point() +
+  scale_colour_viridis_c(option = "plasma", name = "Young Population") +
+  labs(title = "Population Structure, 2025") +
+  theme_bw() +
+  theme(
+    plot.title = element_text(hjust = 0.5, face = "bold"),
+    legend.background = element_rect(colour = "grey93", fill = "grey93"),
+    plot.background = element_rect(fill = "grey93", colour = "grey93")
+  )
+```
+
+### (b) Subplots + tricolore
+
+The following code filter the data for male and female.
+
+```{r}
+library(tricolore)
+library(cowplot)
+
+agpop_male <- pop_data %>%
+  filter(Sex == "Males") %>%
+  spread(AG, Pop) %>%
+  mutate(
+    YOUNG  = rowSums(select(., `0_to_4`, `5_to_9`, `10_to_14`, `15_to_19`, `20_to_24`), na.rm = TRUE),
+    ACTIVE = rowSums(select(., `25_to_29`, `30_to_34`, `35_to_39`, `40_to_44`, `45_to_49`, `50_to_54`, `55_to_59`, `60_to_64`), na.rm = TRUE),
+    OLD    = rowSums(select(., `65_to_69`, `70_to_74`, `75_to_79`, `80_to_84`,
+                               `85_to_89`, `90_and_over`), na.rm = TRUE),
+    TOTAL  = YOUNG + ACTIVE + OLD
+  ) %>%
+  filter(Time == 2025, TOTAL > 0)
+
+agpop_male$tc_color <- Tricolore(agpop_male, p1 = "YOUNG", p2 = "ACTIVE", p3 = "OLD")$color
+
+agpop_female <- pop_data %>%
+  filter(Sex == "Females") %>%
+  spread(AG, Pop) %>%
+  mutate(
+    YOUNG  = rowSums(select(., `0_to_4`, `5_to_9`, `10_to_14`, `15_to_19`, `20_to_24`), na.rm = TRUE),
+    ACTIVE = rowSums(select(., `25_to_29`, `30_to_34`, `35_to_39`, `40_to_44`, `45_to_49`, `50_to_54`, `55_to_59`, `60_to_64`), na.rm = TRUE),
+    OLD    = rowSums(select(., `65_to_69`, `70_to_74`, `75_to_79`, `80_to_84`,
+                               `85_to_89`, `90_and_over`), na.rm = TRUE),
+    TOTAL  = YOUNG + ACTIVE + OLD
+  ) %>%
+  filter(Time == 2025, TOTAL > 0)
+
+agpop_female$tc_color <- Tricolore(agpop_female, p1 = "YOUNG", p2 = "ACTIVE", p3 = "OLD")$color
+
+```
+
+
+Normalise proportions and regenerate Tricolore colors
+```{r}
+agpop_male <- agpop_male %>%
+  mutate(
+    YOUNG_P  = YOUNG / TOTAL,
+    ACTIVE_P = ACTIVE / TOTAL,
+    OLD_P    = OLD / TOTAL
+  )
+
+agpop_female <- agpop_female %>%
+  mutate(
+    YOUNG_P  = YOUNG / TOTAL,
+    ACTIVE_P = ACTIVE / TOTAL,
+    OLD_P    = OLD / TOTAL
+  )
+
+agpop_male$tc_color   <- Tricolore(agpop_male,   p1 = "YOUNG_P", p2 = "ACTIVE_P", p3 = "OLD_P")$rgb
+agpop_female$tc_color <- Tricolore(agpop_female, p1 = "YOUNG_P", p2 = "ACTIVE_P", p3 = "OLD_P")$rgb
+
+```
+
+Next, we create the ternary diagrams for male and female side-by-side using `layout-ncol=2`
+
+::: {layout-ncol=2}
+```{r}
+male_colors <- agpop_male$tc_color   #<< extract first
+
+ggtern(data = agpop_male,
+       aes(x = YOUNG, y = ACTIVE, z = OLD)) +
+  geom_point(color = male_colors,    #<< plain vector
+             size = 2, alpha = 0.8) +
+  labs(title = "Males, 2025", x = "Young", y = "Active", z = "Old") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+```
+
+```{r}
+female_colors <- agpop_female$tc_color  #<< extract first
+
+ggtern(data = agpop_female,
+       aes(x = YOUNG, y = ACTIVE, z = OLD)) +
+  geom_point(color = female_colors,     #<< plain vector
+             size = 2, alpha = 0.8) +
+  labs(title = "Females, 2025", x = "Young", y = "Active", z = "Old") +
+  theme_bw() +
+  theme(plot.title = element_text(hjust = 0.5, face = "bold"))
+```
+:::
+
+### (c) Interactive
+
+```{r}
+paxis <- function(txt) {
+  list(
+    title = txt,
+    tickformat = ".0%",
+    tickfont = list(size = 10),
+    titlefont = list(size = 12),
+    gridcolor = "lightgrey",
+    linecolor = "black",
+    linewidth = 1
+  )
+}
+
+ternaryAxes <- list(
+  aaxis = paxis("Young"),
+  baxis = paxis("Economically Active"),
+  caxis = paxis("Aged")
+)
+
+plot_ly() %>%
+  add_trace(
+    data = agpop_male,
+    a = ~YOUNG_P, b = ~ACTIVE_P, c = ~OLD_P,
+    color = I("steelblue"),
+    type = "scatterternary",
+    mode = "markers",
+    marker = list(size = 6, opacity = 0.7),
+    text = ~paste("PA:", PA, "<br>SZ:", SZ),
+    hoverinfo = "text",
+    subplot = "ternary"
+  ) %>%
+  add_trace(
+    data = agpop_female,
+    a = ~YOUNG_P, b = ~ACTIVE_P, c = ~OLD_P,
+    color = I("tomato"),
+    type = "scatterternary",
+    mode = "markers",
+    marker = list(size = 6, opacity = 0.7),
+    text = ~paste("PA:", PA, "<br>SZ:", SZ),
+    hoverinfo = "text",
+    subplot = "ternary2"
+  ) %>%
+  layout(
+    title = list(
+      text = "Population Structure by Gender, 2025",
+      font = list(size = 14, family = "Arial")
+    ),
+    
+    ## ----- ADJUST THE GAP BETWEEN THE 2 TRIANGLES ---
+ternary  = c(ternaryAxes, list(domain = list(x = c(0.05, 0.42), y = c(0, 0.9)))),
+ternary2 = c(ternaryAxes, list(domain = list(x = c(0.62, 0.97), y = c(0, 0.9)))),
+    
+    ## ----------
+annotations = list(list(text = "Males, 2025",   x = 0.15, y = 0.98, xref = "paper", yref = "paper", showarrow = FALSE, font = list(size = 13),
+bgcolor = "white", bordercolor = "black", borderwidth = 1.5),
+list(text = "Females, 2025", x = 0.82, y = 0.98, xref = "paper", yref = "paper",
+showarrow = FALSE, font = list(size = 13),
+bgcolor = "white", bordercolor = "black", borderwidth = 1.5)),
+paper_bgcolor = "white",
+showlegend = FALSE,
+margin = list(t = 80, r = 100, l = 80, b = 60)  #<< right margin to prevent truncation
+  )
+```
+
+### (d) gganimate
+
+Here, we shall use `gganimate()` to create an animated plot.
+
+First, let's filter the data. Since this dataset has only one year of data (2025), we shall animate using 'Type of Dwelling (TOD)' column.
+
+```{r}
+agpop_animated <- pop_data %>%
+  spread(AG, Pop) %>%                                    #<< spread first
+  mutate(across(`0_to_4`:`90_and_over`, ~replace_na(., 0))) %>%
+  group_by(PA, SZ, TOD, Time) %>%
+  summarise(
+    across(`0_to_4`:`90_and_over`, sum),                 #<< then sum by group
+    .groups = "drop"
+  ) %>%
+  mutate(
+    YOUNG  = rowSums(select(., `0_to_4`, `5_to_9`, `10_to_14`, `15_to_19`, `20_to_24`), na.rm = TRUE),
+    ACTIVE = rowSums(select(., `25_to_29`, `30_to_34`, `35_to_39`, `40_to_44`, `45_to_49`,`50_to_54`, `55_to_59`, `60_to_64`), na.rm = TRUE),
+    OLD    = rowSums(select(., `65_to_69`, `70_to_74`, `75_to_79`, `80_to_84`,
+`85_to_89`, `90_and_over`), na.rm = TRUE),
+    TOTAL  = YOUNG + ACTIVE + OLD
+  ) %>%
+  filter(Time == 2025, TOTAL > 0)
+```
+
+Next we animate the plot
+```{r}
+library(magick)
+
+tod_list <- unique(agpop_animated$TOD)
+
+frames <- lapply(tod_list, function(tod) {
+  df <- agpop_animated %>% filter(TOD == tod)
+  
+  p <- ggtern(data = df,
+              aes(x = YOUNG, y = ACTIVE, z = OLD,
+                  size = TOTAL, color = PA)) +
+    geom_point(alpha = 0.7, show.legend = FALSE) +
+    scale_color_viridis_d(option = "plasma") +
+    scale_size(range = c(2, 15)) +
+    scale_L_continuous("Young\n(0-24)") +
+    scale_T_continuous("Working Age\n(25-64)") +
+    scale_R_continuous("Aged\n(65+)") +
+    labs(
+      title = "Singapore Population Age Structure by Dwelling Type, 2025",
+      subtitle = paste("Dwelling Type:", tod)
+    ) +
+    theme_bw() +
+    theme(
+      tern.axis.arrow.show = TRUE,
+      tern.axis.text    = element_text(size = 8, colour = "grey20"),
+      tern.axis.title.L = element_text(hjust = 0.2, vjust = 0.7, angle = -60),
+      tern.axis.title.R = element_text(hjust = 0.8, vjust = 0.6, angle = 60),
+      plot.title    = element_text(hjust = 0.5, face = "bold"),
+      plot.subtitle = element_text(hjust = 0.5, face = "bold"),
+      legend.position = "none"
+    )
+  
+  tmp <- tempfile(fileext = ".png")
+  ggsave(tmp, p, width = 7, height = 6, dpi = 100)
+  image_read(tmp)
+})
+
+animation <- image_join(frames)
+image_animate(animation, fps = 1)
+```
+
+### (e) Animated
+
+Lastly, here's the chart using plotly animation.
+
+```{r}
+td3 <- plot_ly(agpop_animated,
+               a = ~ACTIVE,
+               b = ~YOUNG,
+               c = ~OLD,
+               frame = ~TOD,
+               mode = "markers",
+               size = ~TOTAL,
+               color = ~PA,
+               type = "scatterternary",
+               text = ~paste("Young:", YOUNG,
+                             "<br>Economically Active:", ACTIVE,
+                             "<br>Aged:", OLD,
+                             "<br>Subzone:", SZ,
+                             "<br>Planning Area:", PA),
+               hoverinfo = "text",
+               marker = list(
+                 symbol = "circle",
+                 opacity = 0.8,
+                 sizemode = "diameter",
+                 sizeref = 2,
+                 line = list(width = 2, color = "#FFFFFF")
+               )) %>%
+  layout(
+    title = list(
+      text = "Demographic Composition of Singapore by Dwelling Type, 2025",
+      font = list(size = 14, family = "Arial"),
+      x = 0.5,
+      y = 0.98                                      #<< push title up
+    ),
+    ternary = list(
+      aaxis = list(title = "Economically Active",
+                   tickformat = ".0%",
+                   gridcolor = "lightgrey",
+                   linecolor = "black"),
+      baxis = list(title = "Young",
+                   tickformat = ".0%",
+                   gridcolor = "lightgrey",
+                   linecolor = "black"),
+      caxis = list(title = "Aged",
+                   tickformat = ".0%",
+                   gridcolor = "lightgrey",
+                   linecolor = "black"),
+      domain = list(x = c(0, 1), y = c(0, 0.88))   #<< shrink ternary down
+    ),
+    paper_bgcolor = "white",
+    plot_bgcolor  = "white",
+    margin = list(t = 80)                           #<< top margin
+  )
+
+td3
+```
+
+::::
+
+## 4 References
+
+* Kam, T.S. (2023). [Creating Ternary Plot with R](https://r4va.netlify.app/chap13).
