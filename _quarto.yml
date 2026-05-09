@@ -23,6 +23,8 @@ website:
             href: hands-on_ex04c.html
           - text: "Exercise 4d: Funnel Plots for Fair Comparisons"
             href: hands-on_ex04d.html
+          - text: "Hands-on Exercise 5a: Creating Ternary Plot with R"
+            href: hands-on_ex05a.html
 
 format:
   html:
