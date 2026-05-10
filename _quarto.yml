@@ -29,6 +29,8 @@ website:
             href: hands-on_ex05b.html
           - text: "Exercise 5c: Heatmap for Visualising and Analysing Multivariate Data"
             href: hands-on_ex05c.html
+          - text: "Exercise 5d: Visual Multivariate Analysis with Parallel Coordinates Plot"
+            href: hands-on_ex05d.html
 
 format:
   html:
