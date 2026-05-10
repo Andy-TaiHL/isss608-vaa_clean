@@ -23,10 +23,12 @@ website:
             href: hands-on_ex04c.html
           - text: "Exercise 4d: Funnel Plots for Fair Comparisons"
             href: hands-on_ex04d.html
-          - text: "Hands-on Exercise 5a: Creating Ternary Plot with R"
+          - text: "Exercise 5a: Creating Ternary Plot with R"
             href: hands-on_ex05a.html
-          - text: "Hands-on Exercise 5b: Visual Correlation Analysis"
+          - text: "Exercise 5b: Visual Correlation Analysis"
             href: hands-on_ex05b.html
+          - text: "Exercise 5c: Heatmap for Visualising and Analysing Multivariate Data"
+            href: hands-on_ex05c.html
 
 format:
   html:
