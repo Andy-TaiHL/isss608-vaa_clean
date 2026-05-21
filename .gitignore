@@ -6,3 +6,10 @@
 /.quarto/
 **/*.quarto_ipynb
 _freeze/
+
+# Data files
+data/
+*.csv
+*.rds
+*.xlsx
+*.parquet
