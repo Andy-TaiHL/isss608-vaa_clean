@@ -31,6 +31,13 @@ website:
             href: hands-on_ex05c.html
           - text: "Exercise 5d: Visual Multivariate Analysis with Parallel Coordinates Plot"
             href: hands-on_ex05d.html
+          - text: "Exercise 5e: Treemap Visualisation with R"
+            href: hands-on_ex05e.html
+
+      - text: "Take-home Exercises"        
+        menu:
+          - text: "Exercise 1"
+            href: take-home_ex01.html
 
 format:
   html:
