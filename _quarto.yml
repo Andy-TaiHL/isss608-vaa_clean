@@ -38,6 +38,8 @@ website:
         menu:
           - text: "Exercise 1"
             href: take-home_ex01.html
+          - text: "Exercise 1 Slides"
+            href: take-home_ex01_slides.html
 
 format:
   html:
