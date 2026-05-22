@@ -233,7 +233,7 @@ Most insured cars are diesel-powered and are located in urban inland areas. Top 
 
 ### (a) policy profile
 
-The faceted bar charts suggest that the overall porfolio is dominated by policyholders with favorable claims histories, and that most are paying their premiums annually. Active policies vastly outnumber cancelled policies. In terms of policy types, **'Third-party + Combined'** is most popular followed by **'Comprehensive (With Excess)'** and **'Third-Party + Glass'**. This may imply that policyholders are mostly of medium risk-appetite, with risk-averse and risk-tolerant segments on either side. Majority of the policies are coming from new business and renewals constitute about a third of total policies.
+The faceted bar charts suggest that the overall portfolio is dominated by policyholders with favorable claims histories, and that most are paying their premiums annually. Active policies vastly outnumber cancelled policies. In terms of policy types, **'Third-party + Combined'** is most popular followed by **'Comprehensive (With Excess)'** and **'Third-Party + Glass'**. This may imply that policyholders are mostly of medium risk-appetite, with risk-averse and risk-tolerant segments on either side. Majority of the policies are coming from new business and renewals constitute about a third of total policies.
 
 ```{r}
 data %>%
@@ -1873,6 +1873,8 @@ make_slider <- function(base_idx, n_traces) {
 
 ### 7.3 Summary of Sensitivity Analysis
 
+Sensitivity analysis examines how changes in a single input variable affect the overall output, holding all other variables constant — allowing us to isolate and quantify the impact of each driver independently.
+
 | Lever | At-Risk Premium | At-Risk Incurred | At-Risk LR | Total LR |
 |---|---|---|---|---|
 | **Records ±x%** | × (1 + x) | × (1 + x) | **Unchanged** | Shifts (mix effect) |
@@ -1892,10 +1894,10 @@ make_slider <- function(base_idx, n_traces) {
 
 ### Sensitivity 1 — Records {#sec-records}
 
-> Adjusting the **number of policies** in the At-Risk segment.
-> More records means more premium **and** more incurred in equal proportion,
-> so the At-Risk loss ratio stays fixed — but the segment's absolute P&L
-> (positive or negative) grows, shifting the **Total** result.
+This sensitivity analysis examines the impact of changes in the number of policies in the At-Risk segment, where both premium and incurred scale proportionally — meaning the At-Risk loss ratio remains unchanged regardless of the adjustment made.
+
+
+At -20% records, the At-Risk P&L reduces from €249,188 to €199,351 — a drop of €49,838 — while the total portfolio loss ratio remains flat at 70.3%. This illustrates that simply shrinking the At-Risk book does not raise the loss ratio; it only reduces the absolute P&L contribution. To move the loss ratio, the underlying claims cost drivers — frequency and severity — must be addressed directly.
 
 ```{r}
 #| label: fig-records
@@ -1966,9 +1968,10 @@ fig_rec
 
 ### Sensitivity 2 — Claim Frequency {#sec-frequency}
 
-> Adjusting how **often claims occur** in the At-Risk segment (e.g. better risk
-> selection, telematics, external shock). Premium stays fixed; only incurred moves.
+This sensitivity analysis examines the impact of changes in claim frequency within the At-Risk segment, holding premiums constant. This reflects real-world situations where claims become more or less frequent — for example due to changes in driving behaviour, road conditions, or broader economic environment.
 
+
+At a +5% frequency shock, the At-Risk segment's P&L drops from €249,188 to €180,588 — a reduction of €68,600 — while the total portfolio loss ratio nudges up by just 0.1pp. Though modest at +5%, the relationship is linear and a sustained upward trend in claim frequency, as already observed in 2024, would erode At-Risk profitability materially over time.
 ```{r}
 #| label: fig-frequency
 #| fig-cap: "Impact on business profitability when At-Risk claim frequency changes"
@@ -2025,8 +2028,10 @@ fig_freq
 
 ### Sensitivity 3 — Claim Severity {#sec-severity}
 
-> Adjusting the **average cost per claim** in the At-Risk segment (e.g. repair
-> inflation, legal cost trends, large-loss emergence). Premium stays fixed.
+This sensitivity analysis examines the impact of changes in claim severity — the average cost per claim — within the At-Risk segment, holding premiums constant. This reflects real-world situations where individual claims become more or less expensive, for example due to rising repair costs, inflationary pressures, or changes in the scale of damages awarded.
+
+
+The results mirror Sensitivity 2 — a +5% severity shock reduces At-Risk P&L by €68,600, from €249,188 to €180,588, with the total portfolio loss ratio increasing by 0.1pp to 70.4%. This symmetry is expected since both frequency and severity enter the loss calculation multiplicatively. Combined, a simultaneous +5% shock to both frequency and severity would roughly double the impact on profitability.
 
 ```{r}
 #| label: fig-severity
