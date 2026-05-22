@@ -897,14 +897,10 @@ p_count <- deep_count %>%
 p_count <- ggplotly(p_count, tooltip = "text") %>%
   layout(legend = list(orientation = "h", y = -0.2))
 
+
 ## (b) Driving Factors
 ## --------------------
-## data wrangling
-## -----------------
-#| include: false
-library(crosstalk)
-library(plotly)
-library(htmlwidgets)
+
 # Shared filter
 loss_making_bands <- c("Under 25", "25-34", "35-44", "65+")
 
@@ -961,47 +957,79 @@ deep_exp_lr <- data_fe %>%
 
 deep_exp_lr <- deep_exp_lr %>%
   mutate(
-    loss_ratio_plot = ifelse(is.na(loss_ratio), -1, loss_ratio),  # <- sentinel
-    label           = ifelse(is.na(loss_ratio), "", ## don't reflect N/A in the labels
+    loss_ratio_plot = ifelse(is.na(loss_ratio), -1, loss_ratio),
+    label           = ifelse(is.na(loss_ratio), "",
                              scales::percent(round(loss_ratio, 2)))
   )
-## #1 Driving Experience
-## ----------------------
-p_exp_avg <- deep_exp_avg %>%
-  ggplot(aes(x     = year,
-             y     = mean_exp,
-             color = portfolio,
-             group = portfolio,
-             text  = paste0(
-               "Portfolio: ",       portfolio,          "<br>",
-               "Year: ",            year,               "<br>",
-               "Mean Experience: ", round(mean_exp, 2), " yrs", "<br>",
-               "Policy Count: ",    policy_count
-             ))) +
-  geom_ribbon(aes(ymin = se_lower, ymax = se_upper, group = portfolio),
-              fill = ifelse(deep_exp_avg$portfolio == "Loss-Making",
-                            "#F44336", "#4CAF50"),
-              alpha = 0.15, color = NA, show.legend = FALSE) +
-  geom_line(linewidth = 1) +
-  geom_point(size = 3) +
-  scale_x_continuous(breaks = unique(deep_exp_avg$year)) +
-  scale_color_manual(values = c("Loss-Making" = "#F44336",
-                                "Profitable"  = "#4CAF50")) +
-  theme_minimal() +
-  theme(legend.position = "bottom") +
-  labs(
-    title    = "Average Driving Experience — Loss-Making vs Profitable Portfolio",
-    subtitle = "Comprehensive (No Excess) | Shaded band = 95% confidence interval",
-    x        = "Year",
-    y        = "Mean Driving Experience (Years)",
-    color    = "Portfolio"
+
+## #1 Driving Experience — native plot_ly()
+## ------------------------------------------
+portfolios  <- unique(deep_exp_avg$portfolio)
+port_colors <- c("Loss-Making" = "#F44336", "Profitable" = "#4CAF50")
+
+driving_experience <- plot_ly()
+
+for (p in portfolios) {
+  df <- deep_exp_avg %>% filter(portfolio == p)
+  
+  # confidence interval ribbon
+  driving_experience <- driving_experience %>%
+    add_trace(
+      data      = df,
+      x         = ~c(year, rev(year)),
+      y         = ~c(se_upper, rev(se_lower)),
+      type      = "scatter",
+      mode      = "lines",
+      fill      = "toself",
+      fillcolor = ifelse(p == "Loss-Making",
+                         "rgba(244,67,54,0.15)",
+                         "rgba(76,175,80,0.15)"),
+      line       = list(color = "transparent"),
+      showlegend = FALSE,
+      hoverinfo  = "skip",
+      name       = paste0(p, " CI")
+    )
+  
+  # main line + points
+  driving_experience <- driving_experience %>%
+    add_trace(
+      data   = df,
+      x      = ~year,
+      y      = ~mean_exp,
+      type   = "scatter",
+      mode   = "lines+markers",
+      name   = p,
+      color  = I(port_colors[p]),
+      line   = list(width = 2),
+      marker = list(size = 8),
+      text   = ~paste0(
+        "Portfolio: ",       portfolio,          "<br>",
+        "Year: ",            year,               "<br>",
+        "Mean Experience: ", round(mean_exp, 2), " yrs", "<br>",
+        "Policy Count: ",    policy_count
+      ),
+      hoverinfo = "text"
+    )
+}
+
+driving_experience <- driving_experience %>%
+  layout(
+    title = list(
+      text = "Average Driving Experience — Loss-Making vs Profitable Portfolio",
+      font = list(size = 14)
+    ),
+    xaxis = list(
+      title    = "Year",
+      tickvals = unique(deep_exp_avg$year),
+      ticktext = as.character(unique(deep_exp_avg$year))
+    ),
+    yaxis     = list(title = "Mean Driving Experience (Years)"),
+    legend    = list(orientation = "h", y = -0.2),
+    hovermode = "closest"
   )
 
-driving_experience <- ggplotly(p_exp_avg, tooltip = "text") %>%
-  layout(legend = list(orientation = "h", y = -0.2))
-
-## #2 Experience Mix
-## ---------------------
+## #2 Experience Mix — ggplotly
+## -----------------------------
 p_exp_comp <- deep_exp_comp %>%
   ggplot(aes(x    = factor(year),
              y    = policy_count,
@@ -1029,48 +1057,86 @@ p_exp_comp <- deep_exp_comp %>%
 experience_mix <- ggplotly(p_exp_comp, tooltip = "text") %>%
   layout(legend = list(orientation = "h", y = -0.2))
 
-## #3 Age x Experience
-## ---------------------
-p_exp_heatmap <- deep_exp_lr %>%
-  ggplot(aes(x    = exp_band,
-             y    = age_band,
-             fill = loss_ratio_plot,        # <- use sentinel column
-             text = paste0(
-               "Age Band: ",   age_band,    "<br>",
-               "Experience: ", exp_band,    "<br>",
-               "Year: ",       year,        "<br>",
-               "Loss Ratio: ", ifelse(is.na(loss_ratio), "N/A",
-                                      scales::percent(round(loss_ratio, 2))), "<br>",
-               "Exposure: ",   ifelse(is.na(total_exposure), "N/A",
-                                      round(total_exposure, 2))
-             ))) +
-  geom_tile(color = "white", linewidth = 0.5) +
-  geom_text(aes(label = label),
-            size = 3, color = "white", fontface = "bold") +
-  facet_wrap(~ year, nrow = 1) +
-  scale_fill_gradientn(
-    colours  = c("grey85", "#4CAF50", "#FFC107", "#F44336"),
-    values   = scales::rescale(c(-1, 0, 1, 2)),  # <- -1 maps to grey
-    limits   = c(-1, 2),
-    oob      = scales::squish,
-    labels   = function(x) ifelse(x == -1, "N/A", scales::percent(x)),
-    breaks   = c(-1, 0, 0.5, 1, 1.5, 2)
-  ) +
-  theme_minimal() +
-  theme(
-    legend.position = "bottom",
-    axis.text.x     = element_text(angle = 45, hjust = 1)
-  ) +
-  labs(
-    title    = "Loss Ratio by Age Band & Driving Experience",
-    subtitle = "Comprehensive (No Excess) | Grey = No data | Capped at 200%",
-    x        = "Driving Experience",
-    y        = "Age Band",
-    fill     = "Loss Ratio"
-  )
+## #3 Age x Experience Heatmap — native plot_ly()
+## ------------------------------------------------
+make_heatmap <- function(yr) {
+  df <- deep_exp_lr %>% filter(year == yr)
+  
+  plot_ly(
+    data      = df,
+    x         = ~exp_band,
+    y         = ~age_band,
+    z         = ~loss_ratio_plot,
+    type      = "heatmap",
+    text      = ~paste0(
+      "Age Band: ",   age_band, "<br>",
+      "Experience: ", exp_band, "<br>",
+      "Year: ",       year,     "<br>",
+      "Loss Ratio: ", ifelse(is.na(loss_ratio), "N/A",
+                             scales::percent(round(loss_ratio, 2))), "<br>",
+      "Exposure: ",   ifelse(is.na(total_exposure), "N/A",
+                             round(total_exposure, 2))
+    ),
+    hoverinfo  = "text",
+    colorscale = list(
+      c(0,    "rgb(200,200,200)"),
+      c(0.25, "rgb(200,200,200)"),
+      c(0.26, "#4CAF50"),
+      c(0.5,  "#FFC107"),
+      c(1,    "#F44336")
+    ),
+    zmin      = -1,
+    zmax      =  2,
+    showscale = (yr == max(deep_exp_lr$year))
+  ) %>%
+    add_annotations(
+      x         = ~exp_band,
+      y         = ~age_band,
+      text      = ~label,
+      showarrow = FALSE,
+      font      = list(color = "white", size = 11)
+    ) %>%
+    layout(
+      annotations = list(
+        list(
+          x         = 0.5,
+          y         = 1.05,
+          xref      = "paper",
+          yref      = "paper",
+          text      = as.character(yr),
+          showarrow = FALSE,
+          font      = list(size = 13)
+        )
+      ),
+      xaxis = list(
+        title         = "Driving Experience",
+        tickangle     = -45,
+        categoryorder = "array",
+        categoryarray = c("0-2 yrs", "3-5 yrs", "6-10 yrs", "11-20 yrs", "20+ yrs")
+      ),
+      yaxis = list(
+        title         = "Age Band",
+        categoryorder = "array",
+        categoryarray = c("Under 25", "25-34", "35-44", "65+")
+      )
+    )
+}
 
-age_exp_heatmap <- ggplotly(p_exp_heatmap, tooltip = "text") %>%
-  layout(legend = list(orientation = "h", y = -0.2))
+age_exp_heatmap <- subplot(
+  make_heatmap(2022),
+  make_heatmap(2023),
+  make_heatmap(2024),
+  nrows  = 1,
+  shareY = TRUE,
+  titleX = TRUE
+) %>%
+  layout(
+    title = list(
+      text = "Loss Ratio by Age Band & Driving Experience",
+      font = list(size = 14)
+    ),
+    margin = list(b = 100)
+  )
 
 ## 7 Sensitivty Analysis and Scenario Analysis
 ## -------------------------------------------

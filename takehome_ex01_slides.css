@@ -1,5 +1,30 @@
-/* Smaller slide headers */
 .reveal h2 {
+  font-size: 0.6em;
+  color: grey;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 0em;
+}
+
+.reveal h3 {
   font-size: 0.8em;
+  font-weight: bold;
+  color: black;
+  margin-top: 0em;
   margin-bottom: 0.2em;
+  line-height: 1.2;
+}
+
+.reveal .slide-number {
+  opacity: 1 !important;
+  visibility: visible !important;
+  font-size: 0.5em !important;
+  background-color: rgba(0,0,0,0.3) !important;
+  color: white !important;
+  padding: 4px 8px !important;
+  border-radius: 4px !important;
+  bottom: 10px !important;
+  right: 10px !important;
+  position: fixed !important;
+  z-index: 9999 !important;
 }
