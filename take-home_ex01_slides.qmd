@@ -225,19 +225,20 @@ This chart reveals a more nuanced picture of age x experience narrative:
 
 ## 5. At-Risk Portfolio Sensivity & Scenario Analysis
 
-### Sensivity Analysis - an increase in claim frequency for the at risk segment can lead to losses
+### Sensivity Analysis - a mere 5% increase in claim frequency for the at risk segment can lead reduce profitability by €68.6K,highlighting the segment’s vulnerability to rising claims
 ```{r}
 fig_freq
 ```
 ::: {style="font-size: 0.4em; margin-top: 0.5em;"}
-* The sensitivity analysis shows how changes in claim frequency affect profitability.
-* A 5% increase in claim frequency is sufficient to turn the segment unprofitable.
+* The sensitivity analysis assesses how changes in claim frequency affect profitability, holding premiums constant.
+* A 5% increase in claim frequency reduces At-Risk P&L by €68,600, highlighting the segment’s vulnerability to rising claims.
+* At-Risk (70% ≤ LR < 100%) means that they are profitable today, but vulnerable to becoming loss-making if claims worsen.
 :::
 
 ::: notes
-* A sensitivity analysis 'chart' (in the form of table) is provided here for to analyse how changes in claim frequency in the at-risk segment can affect overall profitability. 
+* This sensitivity analysis examines the impact of changes in claim frequency within the At-Risk segment, holding premiums constant. This reflects real-world situations where claims become more or less frequent — for example due to changes in driving behaviour, road conditions, or broader economic environment.
 
-* Moving the slider to increase a 5% adjustment in claim frequency can lead to losses for the group.
+* At a +5% frequency shock, the At-Risk segment’s P&L drops from €249,188 to €180,588 — a reduction of €68,600 — while the total portfolio loss ratio nudges up by just 0.1pp. Though modest at +5%, the relationship is linear and a sustained upward trend in claim frequency, as already observed in 2024, would erode At-Risk profitability materially over time.
 
 
 :::

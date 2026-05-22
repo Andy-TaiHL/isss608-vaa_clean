@@ -1682,7 +1682,11 @@ library(plotly)
 library(knitr)
 ```
 
----
+In this section, the portfolio is segmented into three groups based on loss ratio to assess how changes within each segment may affect overall profitability:
+
+* Profitable (LR < 70%) – Premiums comfortably exceed claims, providing a healthy buffer against adverse shocks.
+* At-Risk (70% ≤ LR < 100%) – Still profitable, but operating on thin margins and vulnerable to worsening claims experience.
+* Loss-Making (LR ≥ 100%) – Claims exceed premiums, resulting in negative profitability and requiring immediate intervention.
 
 ### 7.1 Data Wrangling
 
