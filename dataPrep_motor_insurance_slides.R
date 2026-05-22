@@ -1,177 +1,22 @@
----
-title: "Take-Home Exercise 1: Technical Report - visual Analytics for Data Discovery of Motor Insurance Dataset"
-author: "Andy Tai"
-date: "05/13/2026"
-date-modified: last-modified
-format: 
-  html:
-    theme: lumen
-    toc: true
-    toc-depth: 3
-    number-sections: false
-    html-math-method: katex
-editor: source
-execute: 
-  eval: true
-  echo: true
-  warning: false
-  message: false
-  freeze: true
----
+## =========================================================================
+## This has the data preparation for the slide deck for motor insurance
+## =========================================================================
 
-## 1. Overview
-
-Visual Analytics is the combination of data visualisation, statistics and data mining with human judgement to allow data-driven decision-making. It is useful to uncover hidden patterns and insights through the combination of interactive visual interfaces with analytical methods.
-
-Visual analytics can help the insurance industry to identify the causes of poor profitability and high volatility, but its use is often limited to dashboard reporting in tools like Tableau and Microsoft Power BI.
-
-Using a real-world dataset from the motor insurance domain and R visual analytics libraries, this research investigates numerical, categorical and temporal data to identify factors influencing portfolio profitability and volatility.
-
-## 2 Importing libraries, understanding and processing data
-
-:::: {.panel-tabset}
-
-### (a) Install libraries
-
-We shall import tidyverse and other useful R libraries to aid our analysis.
-
-```{r}
-#| echo: true
-#| code-fold: show 
-#| message: false
-#| results: hide
-
+## 1. Load libraries and dataset & rid missing values
+## -----------------------------------------------------
 pacman::p_load(tidyverse, patchwork, ggrepel, ggmisc, ggiraph, DT, 
-  gifski, plotly, shiny, gganimate, ggpp, ggtext, ggdist, ggridges, colorspace, geomtextpath, nord, nortest, seriation, dendextend, heatmaply, ggthemes, hrbrthemes) 
-```
-
-
-### (b) Import & understand data
-
-The dataset of motor insurance policies, along with its meta-data is, obtained from the following [site](https://data.mendeley.com/datasets/sw4jmdb2sm/1). This dataset comprises 354,140 rows (policy records) and 47 columns.
-
-The various policy types are outlined below:
-
-```{=html}
-<style>
-  /* Column widths */
-  #policy-type-table table td:nth-child(1) { width: 8%; }
-  #policy-type-table table td:nth-child(2) { width: 22%; }
-  #policy-type-table table td:nth-child(3) { width: 55%; }
-  #policy-type-table table td:nth-child(4) { width: 15%; }
-
-  /* Header row */
-  #policy-type-table table thead tr th {
-    background-color: #2c3e50;
-    color: white;
-    padding: 10px;
-    border: none;
-  }
-
-  /* Alternating row colours */
-  #policy-type-table table tbody tr:nth-child(odd)  { background-color: #f2f2f2; }
-  #policy-type-table table tbody tr:nth-child(even) { background-color: #ffffff; }
-
-  /* Border styling */
-  #policy-type-table table {
-    border-collapse: collapse;
-    width: 100%;
-  }
-  #policy-type-table table td {
-    border-bottom: 1px solid #ddd;
-    padding: 10px;
-  }
-
-  /* Row hover highlight */
-  #policy-type-table table tbody tr:hover {
-    background-color: #d6eaf8;
-    cursor: default;
-  }
-</style>
-```
-
-::: {#policy-type-table style="font-size: 0.85em;"}
-
-| Code | Policy Type | Description | Coverage |
-|------|-------------|-------------|----------------|
-| **TP** | Third-Party Liability | Basic third-party liability coverage only. Covers damage or injury caused to other parties; own vehicle damage is not covered. | Lowest |
-| **TPG** | Third-Party + Glass | Third-party liability with the addition of glass coverage (windscreen/window repair or replacement). | Low |
-| **CC** | Third-Party Combined | Third-party liability combined with two or more additional coverages such as theft, fire, total loss, or glass. | Medium |
-| **COMP_E** | Comprehensive (With Excess) | Full comprehensive coverage including own vehicle damage, third-party liability, theft, fire and other insured events. Policyholder pays an excess on claims. | High |
-| **COMP_N** | Comprehensive (No Excess) | Same broad coverage as COMP_E but with no excess payable by the policyholder at the point of claim. | Highest |
-
-:::
-
-```{r}
-#| echo: true
-#| message: false
-
-library(janitor)
+               gifski, plotly, shiny, gganimate, ggpp, ggtext, ggdist, 
+               ggridges, colorspace, geomtextpath, nord, nortest, seriation, 
+               dendextend, heatmaply, ggthemes, hrbrthemes, janitor, crosstalk, plotly) 
 
 data <- read_delim("data/motor_ins/Dataset.csv", 
                    delim = ";",
-                   na = c("", ".", "NA")) %>%
-  clean_names()
+                   na = c("", ".", "NA")) %>% 
+                    clean_names() %>% 
+                    na.omit()
 
-# glimpse(data)
-# colnames(data)
-## check no. of rows and cols, and the colnames
-cat("# of rows: ", nrow(data))
-cat("# of cols: ", ncol(data))
-
-```
-
-
-
-### (c) Preprocess data
-
-We noted that there are 1802 rows with missing values, and that this constitutes only 0.51%, far below the typical rule-of-thumb threshold of 5% used to determine if whether missing data is sufficiently substantial to warrant more extensive imputation or remedial treatment. Given this, we simply drop the rows with missing values. In addition, we also note that there are no duplicate records. After adjusting for missing values, we have 352,2338 rows remaining in our dataset. 
-
-Separately, we also created a lists of variables for charting in the follow-on sections.
-
-#### 1. Handling missing values
-
-Let's firstly check for missing values in our dataset.
-
-```{r}
-## check for missing values
-colSums(is.na(data)) %>% 
-  .[. > 0]  #  filters to only columns where missing count is greater than zero.
-
-## num of missing records
-cat("Missing rows:", sum(!complete.cases(data)), "\n")
-cat("Percentage:  ", round(mean(!complete.cases(data)) * 100, 2), "%\n")
-
-```
-
-
-Given less than 5% of the data is missing (here, only 0.5% missing data), it is justifiable to simply drop rows that have missing values.
-
-```{r}
-data <- na.omit(data)
-
-nrow(data)
-```
-
-#### 2. Handling duplicative records
-
-Next, let's check for duplicative records in our dataset and remove them if any.
-
-```{r}
-# Check number of duplicates
-if (sum(duplicated(data))!=0){
-  # Remove duplicates
-  data <- data %>%  distinct()
-}else{
-  print("there are no duplicative records!")
-}
-
-```
-
-#### 3. Create a dictionary based on metadata
-The download [link](https://data.mendeley.com/datasets/sw4jmdb2sm/1) comes with a separate "Description of Variables" excel sheet that contains metadata used in the dataset. Based on this, the following code creates lists of variables that can be unpacked and rendered to make our charts with labels that are more "reader-friendly".
-
-```{r}
+## 2. Create a dictionary like list system to make chart labels reader-friendly
+## -----------------------------------------------------------------------------
 # Policy & Insured characteristics
 policy_status_labels <- c(
   "A" = "Active",
@@ -219,24 +64,11 @@ circulation_area_labels <- c(
   "U" = "Urban",
   "R" = "Rural"
 )
-```
 
-::::
+## 3. Charts for '3 Overview of Motor Insurance policy portfolios/policy profile'
+## -------------------------------------------------------------------------------------
 
-## 3 Overview of Motor Insurance Policy Portfolios
-
-The portfolio is heavily weighted towards policyholders with good claims history, annual payments and of "Third Party + Combined cover". Most policies are active and new business is greater than renewals, a sign of a stable and growing book.
-
-Most insured cars are diesel-powered and are located in urban inland areas. Top 10 vehicle brands are largely well-established European makes.
-
-:::: {.panel-tabset}
-
-### (a) policy profile
-
-The faceted bar charts suggest that the overall porfolio is dominated by policyholders with favorable claims histories, and that most are paying their premiums annually. Active policies vastly outnumber cancelled policies. In terms of policy types, **'Third-party + Combined'** is most popular followed by **'Comprehensive (With Excess)'** and **'Third-Party + Glass'**. This may imply that policyholders are mostly of medium risk-appetite, with risk-averse and risk-tolerant segments on either side. Majority of the policies are coming from new business and renewals constitute about a third of total policies.
-
-```{r}
-data %>%
+policy_profile <- data %>%
   select(policy_type, policy_status, business_type, payment_frequency, bonus_score) %>%
   pivot_longer(everything(), names_to = "variable", values_to = "value") %>%
   mutate(label = case_when(
@@ -256,94 +88,37 @@ data %>%
     legend.position = "none"
   ) +
   labs(title = "Policy Profile Overview", x = NULL, y = "Count")
-```
 
-### (b) insured vehicle profile
+## 4. Charts for '4 Polcyholder Characteristics and Claims Behaviour'
+## --------------------------------------------------------------------------
 
-Next, we look at the vehicle and location profile of the vehicles insured. Majority of the insured vehicles are from urban inland places and of Diesel fuel type.
-
-```{r}
-data %>%
-  select(fuel_type, municipality_type, circulation_area) %>%
-  pivot_longer(everything(), names_to = "variable", values_to = "value") %>%
-  mutate(label = case_when(
-    variable == "fuel_type"         ~ recode(value, !!!fuel_type_labels),
-    variable == "municipality_type" ~ recode(value, !!!municipality_type_labels),
-    variable == "circulation_area"  ~ recode(value, !!!circulation_area_labels),
-    TRUE ~ value
-  )) %>%
-  count(variable, label) %>%                                  # need count for reorder
-  ggplot(aes(x = reorder(label, n), y = n, fill = label)) +  # reorder by count
-  geom_bar(stat = "identity", width = 0.3) +                 # narrower bars
-  facet_wrap(~ variable, scales = "free") +
-  coord_flip() +
-  scale_y_continuous(labels = scales::comma) +
-  scale_fill_brewer(palette = "Set2") +
-  theme_minimal() +
-  theme(
-    axis.text.x     = element_text(angle = 45, hjust = 1),
-    legend.position = "none"
-  ) +
-  labs(title = "Vehicle & Location Profile Overview", x = NULL, y = "Count")
-```
-
-### (c) insured vehicle brands
-
-This chart lists the top ten brands of the insured vehicles, and they are mostly renowned European make.
-
-```{r}
-library(forcats) ## helps segregate top n categories and lumps remainder to another
-
-data %>%
-  mutate(vehicle_brand = fct_lump(vehicle_brand, n = 10),
-         vehicle_brand = recode(vehicle_brand, "Other" = "All Others")) %>%
-  count(vehicle_brand) %>%
-  ggplot(aes(x = reorder(vehicle_brand, n), y = n)) +
-  geom_bar(stat = "identity", width = 0.4, fill = "#2196F3") +
-  scale_fill_brewer(palette = "Set3") +
-  scale_y_continuous(labels = scales::comma) +
-  coord_flip() +
-  theme_minimal() +
-  theme(legend.position = "none") +
-  labs(title = "Vehicle Brand Distribution", 
-       x     = "Vehicle Brand", 
-       y     = "Count")
-```
-
-::::
-
-## 4 Policyholder Characteristics and Claims Behaviour
-
-In this section, we analyse the characteristics of policyholders and their vehicles to determine if they have an impact on policy choice and claims behaviour. The intent is to establish if there are easy ways to identify profile of policyholders who are more amenable to make claims which in turn affects the profitability of insurers.
-
-We first perform feature engineering to create new features that can be used in our charts.
-
-```{r}
+## data warngling
+## -----------------
 data_fe <- data %>%
   mutate(
     # Driving experience proxy
     driving_exp_proxy = driver_age - age_driving_licence,
-
+    
     # Age bands
     age_band = cut(driver_age,
                    breaks = c(0, 25, 35, 45, 55, 65, Inf),
                    labels = c("Under 25", "25-34", "35-44", "45-54", "55-64", "65+"),
                    right  = FALSE),
-
+    
     # Vehicle age bands
     vehicle_age_band = cut(vehicle_age,
                            breaks = c(0, 3, 7, 12, 20, Inf),
                            labels = c("New (0-2)", "Young (3-6)", "Mid (7-11)", 
                                       "Older (12-19)", "Old (20+)"),
                            right  = FALSE),
-
+    
     # Driving experience bands
     exp_band = cut(driving_exp_proxy,
                    breaks = c(0, 2, 5, 10, 20, Inf),
                    labels = c("0-2 yrs", "3-5 yrs", "6-10 yrs", 
-                               "11-20 yrs", "20+ yrs"),
+                              "11-20 yrs", "20+ yrs"),
                    right  = FALSE),
-
+    
     # Derived KPIs
     loss_ratio      = total_incurred / total_premium,
     claim_frequency = total_claims / total_exposure,
@@ -352,69 +127,9 @@ data_fe <- data %>%
   # Remove bad records only (negative experience = data quality issue)
   filter(driving_exp_proxy >= 0)
 
-# ── Quick sanity check 
-#cat("Original rows: ", nrow(data), "\n")
-#cat("Engineered rows:", nrow(data_fe), "\n")
-#cat("Rows removed:  ", nrow(data) - nrow(data_fe), "\n")
-```
-
-The following table summarises the key insights from this section, while the tabs provide the charts along with more detailed analyses.
-
-```{=html}
-<style>
-  #eda-summary table {
-    border-collapse: collapse;
-    width: 100%;
-    table-layout: fixed;
-  }
-  #eda-summary table thead tr th {
-    background-color: #2c3e50;
-    color: white;
-    padding: 10px;
-    border: none;
-  }
-  #eda-summary table tbody tr:nth-child(odd)  { background-color: #f2f2f2; }
-  #eda-summary table tbody tr:nth-child(even) { background-color: #ffffff; }
-  #eda-summary table td, #eda-summary table th {
-    border-bottom: 1px solid #ddd;
-    padding: 10px;
-    word-wrap: break-word;
-  }
-  #eda-summary table tbody tr:hover {
-    background-color: #d6eaf8;
-    cursor: default;
-  }
-  #eda-summary table th:nth-child(1),
-  #eda-summary table td:nth-child(1) { width: 2%; }
-  #eda-summary table th:nth-child(2),
-  #eda-summary table td:nth-child(2) { width: 18%; }
-  #eda-summary table th:nth-child(3),
-  #eda-summary table td:nth-child(3) { width: 80%; }
-</style>
-```
-
-::: {#eda-summary style="font-size: 0.85em;"}
-
-| Chart | Description | Key Insights |
-|:------|:------------|:-------------|
-| **1** | Claims history by driver age band | Broadly uniform across age bands; Under 25 stands out with higher proportions of Bad and Neutral bonus scores. |
-| **2** | Policy type by driver age band | Third-Party Combined dominates, especially Under 25 (~80%). Comprehensive coverage rises with age but falls again at 65+, suggesting cost sensitivity in retirement. |
-| **3** | Claim frequency by age band and circulation area | Urban drivers consistently record higher claim frequency than rural. Frequency declines with age and the urban-rural gap narrows, nearly converging at 65+. |
-| **4** | Average claim severity by vehicle age and fuel type | Newest vehicles (0-2 years) incur the highest average claim costs. Severity follows a U-shape across vehicle age bands. Fuel type shows no consistent effect. |
-| **5** | Loss ratio trend by policy type (2022-2024) | Loss ratios have deteriorated across most policy types. Comprehensive (No Excess) is most alarming, exceeding 100% in 2024. |
-| **6** | Claim frequency by driving experience and age band | Claim frequency declines with experience, most sharply in the first 10 years, converging across age bands beyond 11 years. The 55-64 band with under 2 years experience is a notable outlier at ~0.90. |
-
-:::
-
-:::: {.panel-tabset}
-
-### (a) bonus score
-
-#### Chart 1: Bonus Score by Age Band
-Chart 1, a percentage-stacked bar chart, looks at whether there is a correlation between 'age' and claims history. While overall pattern is relatively uniform across age bands, the 'Under 25' segment stands out. This segment has visibly higher proportion of both Bad (poor claim history) and Neutral bonus scores, as compared to older age bands. This suggests that younger drivers are either filing claims at a higher rate than the rest, or have yet to do so because the policy was newly purchased and reliable bonus scores could not be reasonably established given their short history. This is consistent with their higher risk-profile.
-
-```{r}
-data_fe %>%
+## (a) bonus score
+## ----------------
+bonus_score <- data_fe %>%
   mutate(bonus_label = recode(bonus_score, !!!bonus_score_labels)) %>%
   count(age_band, bonus_label) %>%
   group_by(age_band) %>%
@@ -427,19 +142,10 @@ data_fe %>%
   labs(title    = "Claims History by Driver Age Band",
        subtitle = "Are younger drivers more likely to have poor claims history?",
        x = "Age Band", y = "Proportion", fill = "Bonus Score")
-```
 
-
-### (b) policy type
-
-#### Chart 2: Policy Type by Age Band
-
-Chart 2 looks at whether age of policyholders affects the coverage that they opted in their policies. We noted that proportion of 'Comprehensive (No Excess)', the policy with the highest coverage, is higher and remains relative constant for those aged 25 and above as compared to those under 25. 
-
-However, the proportion of 'Comprehensive (With Excess)', the policy with the second highest coverage, is higher for those aged between 25 to 64. Interestingly, the 65+ band bucks the trend — the combined proportion of Comprehensive policies (both With and Without Excess) is lower than the 25-64 bands, with 'Third-Party + Combined' reasserting dominance.  This implies that older drivers may be switching to lower-cost policies, perhaps because their income is lower when they are retired or because their vehicles are worth less. Collectively, this makes higher coverage less economically attractive for this group.
-
-```{r}
-data_fe %>%
+## (b) policy type
+## ----------------
+policy_type <- data_fe %>%
   mutate(policy_label = recode(policy_type, !!!policy_type_labels)) %>%
   count(age_band, policy_label) %>%
   group_by(age_band) %>%
@@ -452,23 +158,10 @@ data_fe %>%
   labs(title    = "Policy Type by Driver Age Band",
        subtitle = "Do older drivers choose more comprehensive coverage?",
        x = "Age Band", y = "Proportion", fill = "Policy Type")
-```
 
-
-### (c) claim frequency
-
-#### Chart 3: Claim Frequency by Age Band & Circulation Area
-
-Chart 3 examines the frequency of claims across different age bands and areas. This chart shows a consistent pattern: 
-
-* frequency of claims for urban vehicles are consistently higher than rural ones;
-* frequency of claims are decreasing with age of policyholders;
-* urban-rural gap narrows with age -- 'Under 25' shows the widest gap, and this gap noticeably tapers off with older age bands.
-
-
-
-```{r}
-data_fe %>%
+## (c) claim frequency
+## --------------------
+claim_frequency <- data_fe %>%
   mutate(area_label = recode(circulation_area, !!!circulation_area_labels)) %>%
   group_by(age_band, area_label) %>%
   summarise(claim_freq = sum(total_claims) / sum(total_exposure), 
@@ -480,20 +173,9 @@ data_fe %>%
   labs(title    = "Claim Frequency by Age Band and Circulation Area",
        subtitle = "Is urban risk consistently higher across all age groups?",
        x = "Age Band", y = "Claims per Exposure Year", fill = "Area")
-```
 
-
-### (d) claim severity
-
-#### Chart 4: Claim Severity by Vehicle Age Band & Fuel Type
-
-Chart 4 looks at whether older vehicles and their fuel types (diesel vs gasoline) affects severity of claim. Several points stood out:
-
-* Younger vehicles, particularly those that are 2 years old or less, actually costs more on average per claim than older vehicles, in contrasts to most believe. This can be attributed to many factors, including higher parts and labour costs associated with newer models.
-* Vehicles that are more than 20 years old may incur higher average cost per claim, with the exception of the 'New (0-2)' band.
-* Fuel type does not appear to be a meaningful differentiator of claim severity.
-
-```{r}
+## (d) claim severity
+## -------------------
 data_fe %>%
   filter(total_incurred > 0) %>%
   mutate(fuel_label = recode(fuel_type, !!!fuel_type_labels)) %>%
@@ -508,16 +190,9 @@ data_fe %>%
        subtitle = "Do older vehicles cost more per claim?",
        x = "Vehicle Age Band", y = "Average Incurred", fill = "Fuel Type")
 
-```
-
-### (e) loss ratio
-
-#### Chart 5: Loss Ratio by Policy Type & Year
-
-This chart looks at profitability of different policy types over time. It is evident that motor policies are getting less profitable for insurers across all categories. This reflects changing frequency and severity of claims over time. Most striking of all, the increase in costs is most prominent for 'Comprehensive (No Excess)' category, the policy with highest coverage. The loss ratio, defined as sum of total incurred divided by the sum of total premium, from 70+ percent in 2022 to over 100 percent in 2024. This suggest that the insurer is now paying out more in claims than it collects in premiums for this product. Notably, Third-Party + Combined briefly bucked the trend with a dip in 2023 before continuing its upward trajectory in 2024.
-
-```{r}
-data_fe %>%
+## (e) loss-ratio
+## ---------------
+loss_ratio <- data_fe %>%
   mutate(policy_label = recode(policy_type, !!!policy_type_labels)) %>%
   group_by(year, policy_label) %>%
   summarise(loss_ratio = sum(total_incurred) / sum(total_premium), 
@@ -532,22 +207,10 @@ data_fe %>%
   labs(title    = "Loss Ratio Trend by Policy Type",
        subtitle = "Which policy types are becoming more/less profitable?",
        x = "Year", y = "Loss Ratio", color = "Policy Type")
-```
 
-
-### (f) driving experience
-
-#### Chart 6: Claim Frequency by Driving Experience
-
-This chart looks at policyholders' age-bands grouped by their years of driving experience, a feature that we engineered using the difference of driver age and age where they got their driving license, against a claim frequency based on claims per 'exposure year' (i.e., fraction of the year the policy was active). This claim frequency is defined as $\frac{\sum \text{Total Claims}}{\sum \text{Total Exposure}}$.
-
-The following points can be gathered from the chart:
-
-* driving experience, or the lack thereof, correlates with higher claim frequency across almost all age-bands, with the exception of '65+' with less than 2 years of driving experience.
-* amongst those who have 2 years or less driving experience, drivers with '55-64' age-band has the highest claim frequency exceeding well above 90 percent.
-
-```{r}
-data_fe %>%
+## (f) driving experience
+## -----------------------
+driving_experience1 <- data_fe %>%
   group_by(age_band, exp_band) %>%
   summarise(claim_freq = sum(total_claims) / sum(total_exposure), 
             .groups = "drop") %>%
@@ -559,75 +222,11 @@ data_fe %>%
        subtitle = "Does experience reduce claims independently of age?",
        x = "Driving Experience", y = "Claims per Exposure Year", 
        fill = "Age Band")
-```
 
-
-
-::::
-
-## 5 Risk-Return Analysis
-
-This section examines from a macro actuarial perspective, the risk-return analysis of our portfolios. In particular, we shall zoom into two popular metrics in actuarial science - claim frequency and claim severity - and the interplay with portfolio profitability.
-
-```{=html}
-<style>
-  #chart-summary table {
-    border-collapse: collapse;
-    width: 100%;
-    table-layout: fixed;
-  }
-  #chart-summary table thead tr th {
-    background-color: #2c3e50;
-    color: white;
-    padding: 10px;
-    border: none;
-  }
-  #chart-summary table tbody tr:nth-child(odd)  { background-color: #f2f2f2; }
-  #chart-summary table tbody tr:nth-child(even) { background-color: #ffffff; }
-  #chart-summary table td, #chart-summary table th {
-    border-bottom: 1px solid #ddd;
-    padding: 10px;
-    word-wrap: break-word;
-  }
-  #chart-summary table tbody tr:hover {
-    background-color: #d6eaf8;
-    cursor: default;
-  }
-  #chart-summary table th:nth-child(1),
-  #chart-summary table td:nth-child(1) { width: 15%; }
-  #chart-summary table th:nth-child(2),
-  #chart-summary table td:nth-child(2) { width: 35%; }
-  #chart-summary table th:nth-child(3),
-  #chart-summary table td:nth-child(3) { width: 50%; }
-</style>
-```
-
-::: {#chart-summary style="font-size: 0.85em;"}
-
-| Chart | Description | Key Insights |
-|:------|:------------|:-------------|
-| **Chart 1:Bubble Chart** | Four-quadrant risk-return matrix by age band-policy type, coloured by profitability | Loss-making segments cluster in high-frequency quadrants by 2024, pointing to frequency as the primary driver of deterioration. Severity converges towards the median over time. |
-| **Chart 2:Trend Chart** | Profit margin trends by segment (2022–2024) paired with risk positioning | Broad profit margin deterioration across most segments. By 2024, three loss-making segments emerge — all Comprehensive (No Excess) — confirming it as the most distressed product. |
-
-:::
-
-:::: {.panel-tabset}
-
-### (a) Frequency-Severity Bubble Chart
-
-#### Chart 1: Bubble Chart
-Inspired by the BCG matrix, we construct a four-quadrant bubble chart across different policy segments, defined by age band and policy type combinations, and examine how they evolve over time. The four quadrants are delineated by the median claim frequency and median claim severity, representing: Low Frequency + High Severity, High Frequency + High Severity, Low Frequency + Low Severity, and High Frequency + Low Severity. Each bubble is characterised by:
-
-* X-axis: claim frequency — ratio of total claims to total exposure, in log scale
-* Y-axis: claim severity — average cost per claim, in log scale
-* Bubble size: number of policies, log scaled
-* Bubble colour: profit margin, ranging from red (loss-making) to green (profitable)
-* Tooltip: age band and policy type
-
-Navigating from 2022 to 2024, two trends emerge. First, bubbles converge towards the median along the y-axis, suggesting that claim severity is becoming increasingly homogeneous across segments. Second, loss-making segments in 2024 are predominantly concentrated in the high frequency quadrants, indicating that profitability deterioration is being driven primarily by claims frequency rather than severity.
-
-```{r}
-
+## 5. Charts for Risk-Return Analysis
+## --------------------------------------
+## (a) Frequency-Severity Bubble Chart
+## --------------------------------------
 #| label: bubble2-plot
 
 # 1. DATA PREP
@@ -731,10 +330,10 @@ for (i in seq_along(years2)) {
         color    = df_pol$profit_color ,   # direct hex color, no colorscale needed
         line     = list(width = 0)        # removes outline
       ),
-        
-        ## ---------------------end discrete color section--------------------
-
-    ## ----------hover section---------------------------------
+      
+      ## ---------------------end discrete color section--------------------
+      
+      ## ----------hover section---------------------------------
       text = paste0(
         "<b>", df_pol$age_band, " - ", df_pol$policy_label, "</b><br>",
         "Claim Frequency: ",  round(df_pol$avg_claim_freq, 3),                     "<br>",
@@ -745,7 +344,7 @@ for (i in seq_along(years2)) {
       ),
       hoverinfo = "text"
     )
-
+    
     ## --------------end hover section-----------
     idx <- idx + 1
   }
@@ -757,7 +356,7 @@ for (i in seq_along(years2)) {
 buttons2 <- lapply(seq_along(years2), function(i) {
   visible <- rep(FALSE, n_yr2 * n_pol2)
   visible[((i - 1) * n_pol2 + 1):(i * n_pol2)] <- TRUE
-
+  
   list(
     method = "update",
     label  = as.character(years2[i]),
@@ -805,7 +404,7 @@ for (trace in traces) {
 }
 
 # 8. LAYOUT
-p2 %>%
+frequency_severity_bubble_chart <- p2 %>%
   layout(
     showLegend = FALSE, ## turn off legend
     title = list(
@@ -882,20 +481,8 @@ p2 %>%
     margin = list(r = 200)
   )
 
-```
-
-
-
-### (b) Trend Changes
-
-#### Chart 2: Trend Chart
-Alongside the earlier bubble chart, we construct a companion visualisation pairing the risk profile (left panel) with a profitability trend tracker (right panel), tracing each age band-policy type segment across 2022 to 2024. 
-
-The right panel reveals a broad downward drift in profit margins across most segments, consistent with the deteriorating loss ratios observed earlier. Most strikingly, three segments have crossed into loss-making territory (below the red dashed line) by 2024, and all three belong to the Comprehensive (No Excess) policy type — confirming it as the most financially distressed product in the portfolio. 
-
-The left panel contextualises their risk positioning, showing where these loss-making segments sit relative to the median claim frequency and severity thresholds.
-
-```{r}
+## (b) trend changes chart
+## ------------------------
 library(crosstalk)
 library(plotly)
 
@@ -1044,7 +631,7 @@ p_bubble_ly <- ggplotly(p_bubble, tooltip = "text", source = "bubble")
 p_line_ly   <- ggplotly(p_line,   tooltip = "text", source = "line")
 
 # 6. COMBINE AND LINK
-subplot(
+trend_chart <- subplot(
   p_bubble_ly,
   p_line_ly,
   nrows  = 1,
@@ -1061,75 +648,20 @@ subplot(
   ) %>%
   layout(
     hovermode = "closest",
-      title     = list(
+    title     = list(
       text = "Claim Risk Profile vs Profitability Trend by Segment",
       font = list(size = 16),
       x    = 0.5,          # center the title
       xanchor = "center"
     )
-         )
-```
-::::
+  )
 
-## 6 Deep-dive on Loss-making Portfolios
-
-Based on our previous results that all the loss-making portfolios are 'Comprehensive (No Excess). Let us filter and select this data for more in-depth analysis. We will look at their claim patterns and how they have evolved over time, as well as the human variables that influence these patterns.
-
-The key insights for this section is summarised in the table below, while the individual tabs and sub-tabs have the detailed visualisations and analyses.
-
-```{=html}
-<style>
-  #section-summary table {
-    border-collapse: collapse;
-    width: 100%;
-    table-layout: fixed;
-  }
-  #section-summary table thead tr th {
-    background-color: #2c3e50;
-    color: white;
-    padding: 10px;
-    border: none;
-  }
-  #section-summary table tbody tr:nth-child(odd)  { background-color: #f2f2f2; }
-  #section-summary table tbody tr:nth-child(even) { background-color: #ffffff; }
-  #section-summary table td, #section-summary table th {
-    border-bottom: 1px solid #ddd;
-    padding: 10px;
-    word-wrap: break-word;
-  }
-  #section-summary table tbody tr:hover {
-    background-color: #d6eaf8;
-    cursor: default;
-  }
-  #section-summary table th:nth-child(1),
-  #section-summary table td:nth-child(1) { width: 5%; }
-  #section-summary table th:nth-child(2),
-  #section-summary table td:nth-child(2) { width: 25%; }
-  #section-summary table th:nth-child(3),
-  #section-summary table td:nth-child(3) { width: 70%; }
-</style>
-```
-
-::: {#section-summary style="font-size: 0.85em;"}
-
-| # | Description | Key Insights |
-|:--|:------------|:-------------|
-| **C1** | Claim frequency by coverage type, faceted by loss-making age bands | Property claims dominate in frequency across all age bands and years. A sharp upward trend in Property frequency is observed from 2023 to 2024, identifying it as the primary driver of rising claim counts. |
-| **C2** | Claim severity by coverage type, faceted by loss-making age bands | Liability Injury is the most expensive claim type for 25-34 and 65+, peaking in 2023 before declining. Fire severity for 35-44 tripled from ~€5,000 to ~€15,000 between 2022 and 2024. Frequency and severity are driven by different coverage types. |
-| **C3** | Claims composition by coverage type, faceted by loss-making age bands | Property claims consistently account for 50-65% of total claims across all bands and years. Composition is broadly stable, confirming Property as the structurally dominant claim type. |
-| **D1** | Mean driving experience over time — loss-making vs profitable portfolios | Loss-making portfolios average approximately 10 years less driving experience than profitable ones, narrowing to 8 years by 2024. Profitable portfolio experience remains flat at ~31 years throughout. |
-| **D2** | Driving experience composition within loss-making age bands over time | Experience composition is broadly stable over time. The 65+ band is almost entirely 20+ years experienced yet remains loss-making, suggesting experience alone does not explain claims behaviour in older drivers. |
-| **D3** | Loss ratio heatmap by age band and driving experience, faceted by year | 65+ consistently shows elevated loss ratios across all years. 35-44 deteriorates most broadly in 2024 with loss ratios exceeding 100% across all experience levels.|
-
-:::
-
-:::: {.panel-tabset}
-
-### (a) Changes in Claim Patterns
-
-
-#### Data Preparation
-```{r}
+## 6 Deep-dive on loss-making portfolios
+## ----------------------------------------
+## (a) Changes in claim patterns
+## ------------------------------
+## data wrangling
+## ---------------
 # DEEP DIVE DATA PREP
 deep_dive <- data_fe %>%
   filter(policy_type == "COMP_N") %>%
@@ -1163,15 +695,15 @@ deep_freq <- deep_dive %>%
   ) %>%
   mutate(
     coverage_type = recode(coverage_type,
-      "liability_freq"          = "Liability",
-      "liability_property_freq" = "Liability Property",
-      "liability_injury_freq"   = "Liability Injury",
-      "property_freq"           = "Property",
-      "theft_freq"              = "Theft",
-      "fire_freq"               = "Fire",
-      "glass_freq"              = "Glass",
-      "legal_freq"              = "Legal Protection",
-      "occupants_freq"          = "Occupants"
+                           "liability_freq"          = "Liability",
+                           "liability_property_freq" = "Liability Property",
+                           "liability_injury_freq"   = "Liability Injury",
+                           "property_freq"           = "Property",
+                           "theft_freq"              = "Theft",
+                           "fire_freq"               = "Fire",
+                           "glass_freq"              = "Glass",
+                           "legal_freq"              = "Legal Protection",
+                           "occupants_freq"          = "Occupants"
     ),
     claim_freq = ifelse(claim_freq == 0, NA, claim_freq)
   ) %>%
@@ -1223,15 +755,15 @@ deep_sev <- data_fe %>%
   ) %>%
   mutate(
     coverage_type = recode(coverage_type,
-      "liability_sev"          = "Liability",
-      "liability_property_sev" = "Liability Property",
-      "liability_injury_sev"   = "Liability Injury",
-      "property_sev"           = "Property",
-      "theft_sev"              = "Theft",
-      "fire_sev"               = "Fire",
-      "glass_sev"              = "Glass",
-      "legal_sev"              = "Legal Protection",
-      "occupants_sev"          = "Occupants"
+                           "liability_sev"          = "Liability",
+                           "liability_property_sev" = "Liability Property",
+                           "liability_injury_sev"   = "Liability Injury",
+                           "property_sev"           = "Property",
+                           "theft_sev"              = "Theft",
+                           "fire_sev"               = "Fire",
+                           "glass_sev"              = "Glass",
+                           "legal_sev"              = "Legal Protection",
+                           "occupants_sev"          = "Occupants"
     )
   ) %>%
   group_by(age_band) %>%
@@ -1261,67 +793,9 @@ coverage_colours <- c(
   "Theft"               = "#00CED1"
 )
 
-```
 
-#### Understanding Motor Insurance Coverage Claims
-The different coverage claims for motor insurance that are outlined in the table below.
-
-```{=html}
-<style>
-  #coverage-type-table table {
-    border-collapse: collapse;
-    width: 100%;
-    table-layout: fixed;        /* ← forces column widths */
-  }
-  #coverage-type-table table thead tr th {
-    background-color: #2c3e50;
-    color: white;
-    padding: 10px;
-    border: none;
-  }
-  #coverage-type-table table tbody tr:nth-child(odd)  { background-color: #f2f2f2; }
-  #coverage-type-table table tbody tr:nth-child(even) { background-color: #ffffff; }
-  #coverage-type-table table td, #coverage-type-table table th {
-    border-bottom: 1px solid #ddd;
-    padding: 10px;
-    word-wrap: break-word;
-  }
-  #coverage-type-table table tbody tr:hover {
-    background-color: #d6eaf8;
-    cursor: default;
-  }
-  #coverage-type-table table th:nth-child(1),
-  #coverage-type-table table td:nth-child(1) { width: 5%; }
-  #coverage-type-table table th:nth-child(2),
-  #coverage-type-table table td:nth-child(2) { width: 95%; }
-</style>
-```
-::: {#coverage-type-table style="font-size: 0.85em;"}
-
-| Coverage Type | Description |
-|:--------------|:------------|
-| **Fire** | Damage to the policyholder's own vehicle caused by fire |
-| **Glass** | Windscreen and window repair or replacement |
-| **Legal Protection** | Legal costs incurred by the policyholder in dispute resolution |
-| **Liability** | Broad third-party liability — covers damage or injury caused to others |
-| **Liability Injury** | Bodily injury component of third-party liability — compensation for physical injuries caused to third parties |
-| **Liability Property** | Property damage component of third-party liability — damage caused to third party vehicles or property |
-| **Property** | Damage to the policyholder's own vehicle (own damage) |
-| **Theft** | Loss or damage to the policyholder's own vehicle due to theft |
-| **Occupants** | Covers injury or death of passengers travelling in the policyholder's own vehicle |
-
-:::
-
-::: {.panel-tabset}
-
-#### #1 Claim Frequency
-
-##### Chart 1 (C1): Line chart - Claim frequency by coverage faceted by age-bands
-This faceted chart examines claim frequency by coverage type across the four loss-making age bands — Under 25, 25-34, 35-44, and 65+. Across all four bands, Property claims consistently record the highest frequency and exhibit a sharp upward trend, most pronounced between 2023 and 2024. 
-
-This points to Property damage as the primary driver of rising claim frequency within the 'Comprehensive (No Excess)' portfolio, and warrants closer examination in terms of both pricing adequacy and claims management.
-
-```{r}
+## #1 Claim Frequency
+## -------------------
 # CHART 1 — Claim Frequency by Coverage Type over Time
 p_freq <- ggplot(deep_freq_lines,
                  aes(x     = year,
@@ -1343,21 +817,8 @@ p_freq <- ggplot(deep_freq_lines,
     color    = "Coverage Type"
   )
 
-p_freq
-```
-
-#### #2 Claim Severity
-
-##### Chart 2 (C2): Line Chart - Claim severity by coverage faceted by age-bands
-
-This chart examines claim severity by coverage type over time, faceted by the different age-bands in the loss-making portfolios. This identifies which coverage type is most expensive per claim. From the charts, we note the following patterns:
-
-* 'Liability Injury' claims are the most expensive claims made by those in '25-34' and '65+' groups. This appear to be following an inverted U-shape — rising sharply to peak in 2023 before declining in 2024. This suggests large bodily injury settlements may have been concentrated in that period.
-* 'Fire' related claims appeared to be increasing at an alarming rate for the '35-44' age band, rising from slightly below €5,000 per claim on average in 2022 to about €15,000 on average per claim in 2024. This is a threefold increase over three years!
-
-In summary, 'Liability Injury' and 'Fire' claims appeared to be the main claims driving cost pressures within the portfolio.
-
-```{r}
+## #2 Claim Severity
+## ----------------------
 # CHART 2 — Claim Severity by Coverage Type over Time
 p_sev <- ggplot(deep_sev_lines,
                 aes(x     = year,
@@ -1380,17 +841,8 @@ p_sev <- ggplot(deep_sev_lines,
     color    = "Coverage Type"
   )
 
-p_sev
-
-```
-
-
-#### #3 Composition
-
-##### Chart 3 (C3): Percentage Stacked Bar Chart - percentage of total claims by coverage type faceted by age-bands
-This chart looks at claims count composition over time. This examines whether the claims mix is shifting over time.From this chart, while there are minor shifts in coverage claims composition over the years, the main point that stand out is that 'property' related claims dominate across all age-bands and this is consistent over the years. This corroborates the earlier frequency analysis, confirming Property as the structurally dominant claim type.
-
-```{r}
+## #3 Composition
+## ---------------
 # CHART 3 — Claims Count Composition over Time
 
 ## 1. Data Prep
@@ -1442,19 +894,17 @@ p_count <- deep_count %>%
     fill     = "Coverage Type"
   )
 
-ggplotly(p_count, tooltip = "text") %>%
+p_count <- ggplotly(p_count, tooltip = "text") %>%
   layout(legend = list(orientation = "h", y = -0.2))
-```
 
-
-::: 
-
-### (b) Driving Factors
-
-In this section, we investigate if human related factors - age and driving experience - are affecting insurance claims. 
-
-#### Data Preparation
-```{r}
+## (b) Driving Factors
+## --------------------
+## data wrangling
+## -----------------
+#| include: false
+library(crosstalk)
+library(plotly)
+library(htmlwidgets)
 # Shared filter
 loss_making_bands <- c("Under 25", "25-34", "35-44", "65+")
 
@@ -1515,20 +965,8 @@ deep_exp_lr <- deep_exp_lr %>%
     label           = ifelse(is.na(loss_ratio), "", ## don't reflect N/A in the labels
                              scales::percent(round(loss_ratio, 2)))
   )
-```
-
-::: {.panel-tabset}
-
-
-#### #1 Driving Experience
-
-##### Chart 1 (D1): Line chart tracking mean driving experience over time, segregated by loss-making and profit-making portfolios 
-This chart tracks average driving experience between profitable portfolios (corresponding to '45-54' and '55-64' age groups) and the loss-making ones (corresponding to 'Under 25', '25-34', '35-44', '65+' groups) in 'Comprehensive (No Excess)' category. This chart attempts to examine whether drivers in loss-making segments are systematically less experienced than profitable ones.
-
-The chart strongly suggests they are — the loss-making portfolio averages approximately 10 years less driving experience in 2022, narrowing to around 8 years by 2024. 
-
-```{r}
-
+## #1 Driving Experience
+## ----------------------
 p_exp_avg <- deep_exp_avg %>%
   ggplot(aes(x     = year,
              y     = mean_exp,
@@ -1559,23 +997,11 @@ p_exp_avg <- deep_exp_avg %>%
     color    = "Portfolio"
   )
 
-ggplotly(p_exp_avg, tooltip = "text") %>%
+driving_experience <- ggplotly(p_exp_avg, tooltip = "text") %>%
   layout(legend = list(orientation = "h", y = -0.2))
-```
 
-#### #2 Experience Mix
-
-##### Chart 2 (D2): Percentage stacked bar chart examining driving experience across age-bands over time
-
-This chart examines how the experience mix look like in age bands within the loss-making portfolios, and tracks where the composition is changing over the years.
-
-Hovering over the charts, we note that the counts in 'Under 25' average less than 10 policies. Hence, we should discard the composition in this chart as it is unlikely to offer insights that are statistically significant.
-
-Looking at the charts in the other age-bands, the composition appears to be relatively constant over time, suggesting no meaningful structural shifts.
-
-Notably, the 65+ band is almost entirely composed of drivers with 20+ years of experience, yet remains loss-making — underlining that driving experience alone does not fully explain claims behaviour in older drivers. 
-
-```{r}
+## #2 Experience Mix
+## ---------------------
 p_exp_comp <- deep_exp_comp %>%
   ggplot(aes(x    = factor(year),
              y    = policy_count,
@@ -1600,29 +1026,11 @@ p_exp_comp <- deep_exp_comp %>%
     fill     = "Experience Band"
   )
 
-ggplotly(p_exp_comp, tooltip = "text") %>%
+experience_mix <- ggplotly(p_exp_comp, tooltip = "text") %>%
   layout(legend = list(orientation = "h", y = -0.2))
-```
 
-#### #3 Age x Experience
-
-##### Chart 3 (D3): Heatmap of Age band and driving experience, facted by years
-
-To better examine the relationship between age bands and driving experience, we created three heatmaps across the periods to identify which specific age × experience cells are the worst, and whether this shifts over the years. For values and colours in the heatmap correspond to the loss ratio of each age band-driving experience cell in the heatmap. 
-
-Things to note:
-
-* Grey cells represent impossible or unpopulated age-experience combinations. 
-* 0% green cells indicate years where premiums were collected but no claims were made — likely reflecting very small policy counts rather than genuinely zero risk.
-
-This chart reveals a more nuanced picture of age x experience narrative:
-
-* the overall portfolio has deteriorated markedly — the proportion of red and orange cells increases from 2022 to 2024, corroborating the earlier loss ratio trend;
-* the 65+ row consistently shows darker colours across all years, confirming it as a persistently high-risk segment regardless of experience level;
-* The 35-44 age band deteriorates most broadly in 2024, with loss ratios exceeding 100% across virtually all experience levels — suggesting a systemic issue beyond driving experience alone. Most severe is the under 2 years experience cell, recording a loss ratio of 376%, approximately three times higher than the other cells in this band, which warrants deeper investigation.
-
-
-```{r}
+## #3 Age x Experience
+## ---------------------
 p_exp_heatmap <- deep_exp_lr %>%
   ggplot(aes(x    = exp_band,
              y    = age_band,
@@ -1632,9 +1040,9 @@ p_exp_heatmap <- deep_exp_lr %>%
                "Experience: ", exp_band,    "<br>",
                "Year: ",       year,        "<br>",
                "Loss Ratio: ", ifelse(is.na(loss_ratio), "N/A",
-                               scales::percent(round(loss_ratio, 2))), "<br>",
+                                      scales::percent(round(loss_ratio, 2))), "<br>",
                "Exposure: ",   ifelse(is.na(total_exposure), "N/A",
-                               round(total_exposure, 2))
+                                      round(total_exposure, 2))
              ))) +
   geom_tile(color = "white", linewidth = 0.5) +
   geom_text(aes(label = label),
@@ -1661,32 +1069,13 @@ p_exp_heatmap <- deep_exp_lr %>%
     fill     = "Loss Ratio"
   )
 
-ggplotly(p_exp_heatmap, tooltip = "text") %>%
+age_exp_heatmap <- ggplotly(p_exp_heatmap, tooltip = "text") %>%
   layout(legend = list(orientation = "h", y = -0.2))
-```
 
-:::
-
-
-
-::::
-
-
-## 7 At-Risk Portfolio Sensitivity Analysis
-
-```{r}
-#| label: setup
-#| echo: false
-library(dplyr)
-library(plotly)
-library(knitr)
-```
-
----
-
-### 7.1 Data Wrangling
-
-```{r}
+## 7 Sensitivty Analysis and Scenario Analysis
+## -------------------------------------------
+## data wrangling
+## ---------------
 #| label: base-metrics
 #| tbl-cap: "Base portfolio — all segments"
 
@@ -1720,11 +1109,11 @@ base_by_seg <- portfolio_base %>%
 base_all <- bind_rows(
   base_by_seg,
   summarise(base_by_seg,
-    portfolio_type = "Total",
-    total_premium  = sum(total_premium),
-    total_incurred = sum(total_incurred),
-    base_pnl       = sum(base_pnl),
-    base_lr        = sum(total_incurred) / sum(total_premium)
+            portfolio_type = "Total",
+            total_premium  = sum(total_premium),
+            total_incurred = sum(total_incurred),
+            base_pnl       = sum(base_pnl),
+            base_lr        = sum(total_incurred) / sum(total_premium)
   )
 )
 
@@ -1740,14 +1129,6 @@ base_all %>%
   ) %>%
   select(Segment = portfolio_type, Premium, Incurred, `P&L`, `Loss Ratio`) %>%
   knitr::kable(align = c("l", "r", "r", "r", "c"))
-```
-
----
-
-### 7.2 Controlling Chart Aesthetics
-
-```{r}
-#| label: helpers
 
 # ── Adjustment steps ───────────────────────────────────────────────────────────
 adj_pct    <- c(-20, -15, -10, -5, 0, 5, 10, 15, 20)
@@ -1798,9 +1179,9 @@ make_table_trace <- function(fig, d_new, header_color, vis) {
     fig,
     type    = "table",
     visible = vis,
-
+    
     columnwidth = c(120, 80, 65, 90, 80, 65, 75),
-
+    
     header = list(
       values = c(
         "<b>Segment</b>",
@@ -1809,13 +1190,13 @@ make_table_trace <- function(fig, d_new, header_color, vis) {
         "<b>New LR</b>",    "<b>\u0394 LR</b>"
       ),
       fill   = list(color = c(H_SEG, H_BASE, H_BASE,
-                               header_color, header_color,
-                               header_color, header_color)),
+                              header_color, header_color,
+                              header_color, header_color)),
       font   = list(color = WHITE, size = 11, family = "Arial"),
       align  = "center",
       height = 32
     ),
-
+    
     cells = list(
       values = list(
         segs,
@@ -1869,38 +1250,9 @@ make_slider <- function(base_idx, n_traces) {
     )
   )
 }
-```
 
-### 7.3 Summary of Sensitivity Analysis
-
-| Lever | At-Risk Premium | At-Risk Incurred | At-Risk LR | Total LR |
-|---|---|---|---|---|
-| **Records ±x%** | × (1 + x) | × (1 + x) | **Unchanged** | Shifts (mix effect) |
-| **Frequency ±x%** | Unchanged | × (1 + x) | Changes | Changes |
-| **Severity ±x%** | Unchanged | × (1 + x) | Changes | Changes |
-
-: {tbl-colwidths="[22,18,18,18,18]"}
-
-> In all three analyses, the **Profitable** and **Loss-Making** segments are held
-> at their base values. Only the At-Risk segment is stressed, and the Total row
-> reflects the combined picture of all three segments.
-
-
----
-
-:::: {.panel-tabset}
-
-### Sensitivity 1 — Records {#sec-records}
-
-> Adjusting the **number of policies** in the At-Risk segment.
-> More records means more premium **and** more incurred in equal proportion,
-> so the At-Risk loss ratio stays fixed — but the segment's absolute P&L
-> (positive or negative) grows, shifting the **Total** result.
-
-```{r}
-#| label: fig-records
-#| fig-cap: "Impact on business profitability when At-Risk portfolio records change"
-
+## sensitivity analysis - record counts
+## ------------------------------------
 H_REC    <- "#1a5276"
 base_idx <- which(adj_pct == 0)
 
@@ -1912,11 +1264,11 @@ fig_rec <- plot_ly()
 for (i in seq_along(adj_pct)) {
   fac <- 1 + adj_pct[i] / 100
   vis <- (i == base_idx)
-
+  
   # At-Risk: both premium and incurred scale => LR unchanged
   ar_new_prem <- ar$total_premium  * fac
   ar_new_inc  <- ar$total_incurred * fac
-
+  
   # Rebuild full table: only At-Risk row changes
   d_new <- base_all %>%
     mutate(
@@ -1938,7 +1290,7 @@ for (i in seq_along(adj_pct)) {
       delta_pnl = new_pnl - base_pnl,
       delta_lr  = new_lr  - base_lr
     )
-
+  
   fig_rec <- make_table_trace(fig_rec, d_new, H_REC, vis)
 }
 
@@ -1958,21 +1310,8 @@ fig_rec <- layout(
   margin  = list(t = 90, b = 90, l = 10, r = 10) ## b --> tightens below slider
 )
 
-fig_rec
-```
-
-
----
-
-### Sensitivity 2 — Claim Frequency {#sec-frequency}
-
-> Adjusting how **often claims occur** in the At-Risk segment (e.g. better risk
-> selection, telematics, external shock). Premium stays fixed; only incurred moves.
-
-```{r}
-#| label: fig-frequency
-#| fig-cap: "Impact on business profitability when At-Risk claim frequency changes"
-
+## sensivity analysis - claim frequency
+## ------------------------------------
 H_FREQ <- "#1e8449"
 
 fig_freq <- plot_ly()
@@ -1980,10 +1319,10 @@ fig_freq <- plot_ly()
 for (i in seq_along(adj_pct)) {
   fac <- 1 + adj_pct[i] / 100
   vis <- (i == base_idx)
-
+  
   # At-Risk: only incurred scales
   ar_new_inc <- ar$total_incurred * fac
-
+  
   d_new <- base_all %>%
     mutate(
       new_premium  = total_premium,
@@ -1998,7 +1337,7 @@ for (i in seq_along(adj_pct)) {
       delta_pnl = new_pnl - base_pnl,
       delta_lr  = new_lr  - base_lr
     )
-
+  
   fig_freq <- make_table_trace(fig_freq, d_new, H_FREQ, vis)
 }
 
@@ -2018,84 +1357,9 @@ fig_freq <- layout(
   margin  = list(t = 90, b = 90, l = 10, r = 10)
 )
 
-fig_freq
-```
 
----
-
-### Sensitivity 3 — Claim Severity {#sec-severity}
-
-> Adjusting the **average cost per claim** in the At-Risk segment (e.g. repair
-> inflation, legal cost trends, large-loss emergence). Premium stays fixed.
-
-```{r}
-#| label: fig-severity
-#| fig-cap: "Impact on business profitability when At-Risk claim severity changes"
-
-H_SEV <- "#784212"
-
-fig_sev <- plot_ly()
-
-for (i in seq_along(adj_pct)) {
-  fac <- 1 + adj_pct[i] / 100
-  vis <- (i == base_idx)
-
-  # Severity: identical arithmetic to frequency — only incurred scales
-  ar_new_inc <- ar$total_incurred * fac
-
-  d_new <- base_all %>%
-    mutate(
-      new_premium  = total_premium,
-      new_incurred = dplyr::if_else(portfolio_type == "At-Risk",
-                                    ar_new_inc, total_incurred),
-      new_incurred = dplyr::if_else(
-        portfolio_type == "Total",
-        sum(dplyr::if_else(segs == "At-Risk", ar_new_inc, total_incurred)[segs != "Total"]),
-        new_incurred),
-      new_pnl   = new_premium  - new_incurred,
-      new_lr    = new_incurred / new_premium,
-      delta_pnl = new_pnl - base_pnl,
-      delta_lr  = new_lr  - base_lr
-    )
-
-  fig_sev <- make_table_trace(fig_sev, d_new, H_SEV, vis)
-}
-
-fig_sev <- layout(
-  fig_sev,
-  title = list(
-    text = paste0(
-      "<b>Sensitivity 3: At-Risk Claim Severity</b>",
-      "<br><sup>Premium held constant &mdash; ",
-      "a +10% severity means each claim costs 10% more on average</sup>"
-    ),
-    x    = 0.01,
-    font = list(size = 14)
-  ),
-  sliders = make_slider(base_idx, n_adj),
-  height = 420,
-  margin  = list(t = 90, b = 90, l = 10, r = 10)
-)
-
-fig_sev
-```
-
-
----
-
-::::
-
-
-## 8 At-Risk Portfolio Scenario Analysis
-
-The scenario analysis stress-tests the at-risk portfolio under three assumptions — Base Case, Best Case, and Worst Case — by applying shocks to three levers: policy count (records), claim frequency, and claim severity. 
-
-Shocks are applied exclusively to the at-risk segments, while profitable segments are held constant, allowing the incremental financial impact of each scenario to be isolated. The resulting changes in P&L and loss ratio are reported at both the segment and total portfolio level, reflecting how deterioration in the at-risk book propagates to overall portfolio profitability.
-
-> All three levers move simultaneously. Only the **At-Risk** segment is stressed;
-> Profitable and Loss-Making are held at base.
-
-```{r}
+## scenario analysis
+## ------------------
 scenarios <- list(
   list(
     name    = "Base Case",
@@ -2123,11 +1387,11 @@ fig_scen   <- plot_ly()
 for (j in seq_along(scenarios)) {
   sc  <- scenarios[[j]]
   vis <- (j == 1)
-
+  
   r_fac <- 1 + sc$records / 100
   f_fac <- 1 + sc$freq    / 100
   s_fac <- 1 + sc$sev     / 100
-
+  
   d_sc <- base_all %>%
     mutate(
       new_premium  = dplyr::if_else(
@@ -2151,14 +1415,14 @@ for (j in seq_along(scenarios)) {
       delta_pnl = new_pnl - base_pnl,
       delta_lr  = new_lr  - base_lr
     )
-
+  
   fig_scen <- add_trace(
     fig_scen,
     type    = "table",
     visible = vis,
-
+    
     columnwidth = c(120, 80, 65, 90, 80, 65, 75),
-
+    
     header = list(
       values = c(
         "<b>Segment</b>",
@@ -2167,13 +1431,13 @@ for (j in seq_along(scenarios)) {
         "<b>New LR</b>",    "<b>\u0394 LR</b>"
       ),
       fill   = list(color = c(H_SEG, H_BASE, H_BASE,
-                               sc$color, sc$color,
-                               sc$color, sc$color)),
+                              sc$color, sc$color,
+                              sc$color, sc$color)),
       font   = list(color = WHITE, size = 11, family = "Arial"),
       align  = "center",
       height = 32
     ),
-
+    
     cells = list(
       values = list(
         segs,
@@ -2253,13 +1517,3 @@ fig_scen <- layout(
   margin = list(t = 200, b = 20, l = 10, r = 10) ## adjust 'space' for title + buttons
 )
 
-fig_scen
-```
-
-## 9 Conclusion
-
-The analysis evaluates the dataset from an European Motor insurance company to identify its portfolio, how it changes over time, and how these changes affects its bottom line. The results tell a consistent story: the portfolio is becoming more unprofitable over the 2022-2024 timeframe, with some age groups and policy types disproportionately responsible for the losses.
-
-Analysis demonstrates that unprofitability is not related to a single cause but rather a confluence of factors like claims behaviour, driving experience and form of coverage purchased. Young and old drivers at the ends of the age spectrum, and medium aged drivers in some segments, all contribute to the loss-making picture in different ways and for different reasons.
-
-The scenario analysis shows that without assistance the financial prognosis for the at-risk categories is likely to deteriorate. Targeted action – be it repricing, underwriting limits or claims management – will be vital in order to restore portfolio profitability.

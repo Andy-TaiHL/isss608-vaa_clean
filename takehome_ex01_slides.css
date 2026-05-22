@@ -1,0 +1,5 @@
+/* Smaller slide headers */
+.reveal h2 {
+  font-size: 0.8em;
+  margin-bottom: 0.2em;
+}

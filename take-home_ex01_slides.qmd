@@ -1,0 +1,193 @@
+---
+title: "Motor Insurance Portfolio Analysis"
+subtitle: "Spanish Market | 2022–2024"
+author: "Andy Tai"
+date: "05/21/2026"
+format:
+  revealjs:
+    theme: simple
+    slide-number: true
+    toc: true
+    toc-depth: 1
+    code-fold: true
+    embed-resources: true
+    html-dependencies:
+      - plotly
+    css: takehome_ex01_slides.css
+---
+
+## Contents
+
+-   1. Portfolio Overview
+-   2. Policyholder Characteristics and Claims Behaviour
+-   3. Risk-Return Analysis
+-   4. Deep-dive on Loss-making Portfolios
+-   5. At-Risk Portfolio Sensitivity & Scenario Analysis\
+-   6. Conclusion
+
+```{r}
+#| include: false
+source("dataPrep_motor_insurance_slides.R")  # loads all data AND chart objects
+```
+
+::: notes
+Using a real-world dataset from the motor insurance domain and R visual analytics libraries, this research investigates numerical, categorical and temporal data to identify factors influencing portfolio profitability and volatility.
+:::
+
+## 1. Portfolio Overview - policyholders are mostly of medium risk-appetite, with risk-averse and risk-tolerant segments on either side
+```{r}
+policy_profile  
+```
+
+::: notes
+* Overall portfolio is dominated by policyholders with favorable claims histories, and that most are paying their premiums annually. Active policies vastly outnumber cancelled policies. 
+
+* In terms of policy types, ‘Third-party + Combined’ is most popular followed by ‘Comprehensive (With Excess)’ and ‘Third-Party + Glass’. This may imply that policyholders are mostly of medium risk-appetite, with risk-averse and risk-tolerant segments on either side. Majority of the policies are coming from new business and renewals constitute about a third of total policies.
+:::
+
+## 2a. Policyholder Characteristics and Claims Behaviour - older drivers may be switching to lower-cost policies
+```{r}
+policy_type
+```
+
+::: notes
+* We noted that proportion of ‘Comprehensive (No Excess)’, the policy with the highest coverage, is higher and remains relative constant for those aged 25 and above as compared to those under 25.
+
+* However, the proportion of ‘Comprehensive (With Excess)’, the policy with the second highest coverage, is higher for those aged between 25 to 64. Interestingly, the 65+ band bucks the trend — the combined proportion of Comprehensive policies (both With and Without Excess) is lower than the 25-64 bands, with ‘Third-Party + Combined’ reasserting dominance. This implies that older drivers may be switching to lower-cost policies, perhaps because their income is lower when they are retired or because their vehicles are worth less. Collectively, this makes higher coverage less economically attractive for this group.
+:::
+
+## 2b. Policyholder Characteristics and Claims Behaviour - over time, insurer is paying out more in claims than it collects in premiums for this product
+```{r}
+loss_ratio
+```
+
+::: notes
+* This chart looks at profitability of different policy types over time. It is evident that motor policies are getting less profitable for insurers across all categories. This reflects changing frequency and severity of claims over time. 
+
+* Most striking of all, the increase in costs is most prominent for ‘Comprehensive (No Excess)’ category, the policy with highest coverage. The loss ratio, defined as sum of total incurred divided by the sum of total premium, from 70+ percent in 2022 to over 100 percent in 2024. This suggest that the insurer is now paying out more in claims than it collects in premiums for this product. Notably, Third-Party + Combined briefly bucked the trend with a dip in 2023 before continuing its upward trajectory in 2024.
+:::
+
+## 2c. Policyholder Characteristics and Claims Behaviour - lack of driving experience correlates with higher claim frequency almost across all age-bands
+```{r}
+#| include: false
+knitr::opts_chunk$set(dev = "svg")  # ← switch device from png to svg
+
+```
+
+
+```{r}
+driving_experience1
+```
+::: notes
+* driving experience, or the lack thereof, correlates with higher claim frequency across almost all age-bands, with the exception of ‘65+’ with less than 2 years of driving experience.
+* amongst those who have 2 years or less driving experience, drivers with ‘55-64’ age-band has the highest claim frequency exceeding well above 90 percent.
+:::
+
+## 3a. Risk-Return Analysis - Frequency-Severity Bubble Chart - profitability deterioration may be driven primarily by claims frequency
+```{r}
+frequency_severity_bubble_chart
+```
+
+::: notes
+* Navigating from 2022 to 2024, two trends emerge. First, bubbles converge towards the median along the y-axis, suggesting that claim severity is becoming increasingly homogeneous across segments. 
+
+* Second, loss-making segments in 2024 are predominantly concentrated in the high frequency quadrants, indicating that profitability deterioration is being driven primarily by claims frequency rather than severity.
+:::
+
+## 3b. Risk-Return Analysis - Trend Changes - all three loss-making portfolios in 2024 belong to Comprehensive (No Excess) policy type
+```{r}
+trend_chart
+```
+
+::: notes
+* The right panel reveals a broad downward drift in profit margins across most segments, consistent with the deteriorating loss ratios observed earlier. Most strikingly, three segments have crossed into loss-making territory (below the red dashed line) by 2024, and all three belong to the Comprehensive (No Excess) policy type — confirming it as the most financially distressed product in the portfolio.
+
+* The left panel contextualises their risk positioning, showing where these loss-making segments sit relative to the median claim frequency and severity thresholds.
+:::
+
+## 4a. Deep-dive on Loss-making Portfolios - claim frequency - Property claims consistently record the highest frequency with rising trend
+```{r}
+p_freq
+```
+
+::: notes
+* This faceted chart examines claim frequency by coverage type across the four loss-making age bands — Under 25, 25-34, 35-44, and 65+. Across all four bands, Property claims consistently record the highest frequency and exhibit a sharp upward trend, most pronounced between 2023 and 2024.
+
+* This points to Property damage as the primary driver of rising claim frequency within the ‘Comprehensive (No Excess)’ portfolio, and warrants closer examination in terms of both pricing adequacy and claims management.
+:::
+
+## 4b. Deep-dive on Loss-making Portfolio - claim severity - ‘Liability Injury’ and ‘Fire’ claims appeared to be the main claims driving cost pressures within the portfolio
+```{r}
+p_sev
+```
+::: notes
+This chart examines claim severity by coverage type over time, faceted by the different age-bands in the loss-making portfolios. This identifies which coverage type is most expensive per claim. From the charts, we note the following patterns:
+
+* ‘Liability Injury’ claims are the most expensive claims made by those in ‘25-34’ and ‘65+’ groups. This appear to be following an inverted U-shape — rising sharply to peak in 2023 before declining in 2024. This suggests large bodily injury settlements may have been concentrated in that period.
+
+* ‘Fire’ related claims appeared to be increasing at an alarming rate for the ‘35-44’ age band, rising from slightly below €5,000 per claim on average in 2022 to about €15,000 on average per claim in 2024. This is a threefold increase over three years!
+:::
+
+
+## 4c. Deep-dive on Loss-making Portfolios - driving experience - loss-making portfolio averages approximately 10 years less driving experience in 2022, narrowing to around 8 years by 2024
+```{r}
+p_exp_avg
+```
+
+::: notes
+This chart tracks average driving experience between profitable portfolios (corresponding to ‘45-54’ and ‘55-64’ age groups) and the loss-making ones (corresponding to ‘Under 25’, ‘25-34’, ‘35-44’, ‘65+’ groups) in ‘Comprehensive (No Excess)’ category. This chart attempts to examine whether drivers in loss-making segments are systematically less experienced than profitable ones.
+
+The chart strongly suggests they are — the loss-making portfolio averages approximately 10 years less driving experience in 2022, narrowing to around 8 years by 2024.
+:::
+
+## 4d. Deep-dive on Loss-making Portfolios - age x driving experience - The 35-44 age band deteriorates broadly in 2024 across all experience levels, suggesting a systemic issue beyond driving experience alone
+```{r}
+p_exp_heatmap
+```
+
+::: notes
+This chart reveals a more nuanced picture of age x experience narrative:
+
+* the overall portfolio has deteriorated markedly — the proportion of red and orange cells increases from 2022 to 2024, corroborating the earlier loss ratio trend;
+* the 65+ row consistently shows darker colours across all years, confirming it as a persistently high-risk segment regardless of experience level;
+* The 35-44 age band deteriorates most broadly in 2024, with loss ratios exceeding 100% across virtually all experience levels — suggesting a systemic issue beyond driving experience alone. Most severe is the under 2 years experience cell, recording a loss ratio of 376%, approximately three times higher than the other cells in this band, which warrants deeper investigation.
+:::
+
+## 5a. At-Risk Portfolio Sensivity & Scenario Analysis - Sensivity Analysis - an increase in claim frequency for the at risk segment can lead to losses
+```{r}
+fig_freq
+```
+
+::: notes
+* A sensitivity analysis 'chart' (in the form of table) is provided here for to analyse how changes in claim frequency in the at-risk segment can affect overall profitability. 
+
+* Moving the slider to increase a 5% adjustment in claim frequency can lead to losses for the group.
+
+
+:::
+
+## 5b. At-Risk Portfolio Sensivity & Scenario Analysis - Scenario Analysis - business profitability can be sensitive to 'black swan' events as mnodelled in scenario analysis
+```{r}
+fig_scen
+```
+
+::: notes
+* The scenario analysis stress-tests the at-risk portfolio under three assumptions — Base Case, Best Case, and Worst Case — by applying shocks to three levers: policy count (records), claim frequency, and claim severity.
+
+* Shocks are applied exclusively to the at-risk segments, while profitable segments are held constant, allowing the incremental financial impact of each scenario to be isolated. The resulting changes in P&L and loss ratio are reported at both the segment and total portfolio level, reflecting how deterioration in the at-risk book propagates to overall portfolio profitability.
+:::
+
+## 6. Conclusion - losses is due to multiple factors, and profitability position can be sensitive to unforeseen events affecting the at-risk segment. Inventions may be necessary to mitigate this risk
+-   portfolio is becoming more unprofitable over the 2022-2024 timeframe, with some age groups and policy types disproportionately responsible for the losses.
+
+-   Analysis demonstrates that unprofitability is not related to a single cause but rather a confluence of factors.
+    
+-   The scenario analysis shows that without assistance the financial prognosis for the at-risk categories is likely to deteriorate. 
+
+::: notes
+The analysis evaluates an European Motor insurance company to identify its portfolio, how it changes over time, and how these changes affects its bottom line. The results tell a consistent story: the portfolio is becoming more unprofitable over the 2022-2024 timeframe, with some age groups and policy types disproportionately responsible for the losses.
+
+Analysis demonstrates that unprofitability is not related to a single cause but rather a confluence of factors like claims behaviour, driving experience and form of coverage purchased. Young and old drivers at the ends of the age spectrum, and medium aged drivers in some segments, all contribute to the loss-making picture in different ways and for different reasons.
+
+The scenario analysis shows that without assistance the financial prognosis for the at-risk categories is likely to deteriorate. Targeted action – be it repricing, underwriting limits or claims management – will be vital in order to restore portfolio profitability.
+:::
