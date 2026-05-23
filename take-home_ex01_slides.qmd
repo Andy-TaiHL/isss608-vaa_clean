@@ -267,7 +267,7 @@ fig_scen
 
 ## 6. Conclusion
 
-### Losses is due to multiple factors, and profitability position can be sensitive to unforeseen events affecting the at-risk segment. Inventions may be necessary to mitigate this risk
+### Losses is due to multiple factors, and profitability position can be sensitive to unforeseen events affecting the at-risk segment. Interventions may be necessary to mitigate this risk
 -   Portfolio is becoming more unprofitable over the 2022-2024 timeframe, with some age groups and policy types disproportionately responsible for the losses.
 
 -   Analysis demonstrates that unprofitability is not related to a single cause but rather a confluence of factors.
