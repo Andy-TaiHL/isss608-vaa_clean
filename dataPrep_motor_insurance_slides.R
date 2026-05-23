@@ -7,7 +7,7 @@
 pacman::p_load(tidyverse, patchwork, ggrepel, ggmisc, ggiraph, DT, 
                gifski, plotly, shiny, gganimate, ggpp, ggtext, ggdist, 
                ggridges, colorspace, geomtextpath, nord, nortest, seriation, 
-               dendextend, heatmaply, ggthemes, hrbrthemes, janitor, crosstalk, plotly) 
+               dendextend, heatmaply, ggthemes, hrbrthemes, janitor, crosstalk, plotly, ggstatsplot) 
 
 data <- read_delim("data/motor_ins/Dataset.csv", 
                    delim = ";",
@@ -92,7 +92,7 @@ policy_profile <- data %>%
 ## 4. Charts for '4 Polcyholder Characteristics and Claims Behaviour'
 ## --------------------------------------------------------------------------
 
-## data warngling
+## data wrangling
 ## -----------------
 data_fe <- data %>%
   mutate(
@@ -127,6 +127,112 @@ data_fe <- data %>%
   # Remove bad records only (negative experience = data quality issue)
   filter(driving_exp_proxy >= 0)
 
+## histogram panel
+## ----------------
+# ── Run tests first ────────────────────────────────────────────────────────────
+vars <- list(
+  list(var = "driver_age",        name = "Driver Age",          binsize = 5,    color = "#3498db"),
+  list(var = "driving_exp_proxy", name = "Driving Experience",  binsize = 5,    color = "#2ecc71"),
+  list(var = "vehicle_value",     name = "Vehicle Value",       binsize = 5000, color = "#e67e22"),
+  list(var = "total_premium",     name = "Total Premium",       binsize = 50,   color = "#9b59b6")
+)
+
+# compute stats for all variables
+stats_list <- lapply(vars, function(v) {
+  vals    <- data_fe[[v$var]]
+  m       <- mean(vals, na.rm = TRUE)
+  med     <- median(vals, na.rm = TRUE)
+  s       <- sd(vals, na.rm = TRUE)
+  skew    <- e1071::skewness(vals, na.rm = TRUE)
+  kurt    <- e1071::kurtosis(vals, na.rm = TRUE)
+  iqr_r   <- (m - med) / IQR(vals, na.rm = TRUE)
+  ttest   <- t.test(vals, mu = med)
+  
+  list(
+    name    = v$name,
+    mean    = round(m, 2),
+    median  = round(med, 2),
+    sd      = round(s, 2),
+    skew    = round(skew, 3),
+    kurt    = round(kurt, 3),
+    iqr_r   = round(iqr_r, 3),
+    t_stat  = round(ttest$statistic, 3),
+    t_pval  = ttest$p.value,
+    shape   = case_when(
+      abs(iqr_r) < 0.2 ~ "Approximately Symmetric",
+      iqr_r > 0        ~ "Right-Skewed",
+      TRUE             ~ "Left-Skewed"
+    )
+  )
+})
+# ── Build histograms with stats as annotations ─────────────────────────────────
+make_hist <- function(v, st) {
+  vals <- data_fe[[v$var]]
+  
+  annotation_text <- paste0(
+    "<b>", st$name, "</b><br>",
+    "Mean: ",    st$mean,   " | Median: ", st$median,  "<br>",
+    "SD: ",      st$sd,     " | Skew: ",   st$skew,    "<br>",
+    "Kurt: ",    st$kurt,   " | IQR ratio: ", st$iqr_r,"<br>",
+    "t-stat: ",  st$t_stat, " | p: ",      formatC(st$t_pval, format = "e", digits = 2), "<br>",
+    "<i>", st$shape, "</i>"
+  )
+  
+  plot_ly(
+    x      = vals,
+    type   = "histogram",
+    xbins  = list(size = v$binsize),
+    marker = list(color = v$color, line = list(color = "white", width = 0.5)),
+    name   = v$name
+  ) %>%
+    layout(
+      xaxis = list(title = v$name),
+      yaxis = list(title = "Count"),
+      annotations = list(
+        list(
+          x           = 0.97,
+          y           = 0.97,
+          xref        = "paper",
+          yref        = "paper",
+          text        = annotation_text,
+          showarrow   = FALSE,
+          xanchor     = "right",
+          yanchor     = "top",
+          align       = "left",
+          bgcolor     = "rgba(255,255,255,0.85)",
+          bordercolor = "grey",
+          borderwidth = 1,
+          font        = list(size = 10)
+        )
+      ),
+      shapes = list(
+        list(type = "line",
+             x0 = st$mean,   x1 = st$mean,
+             y0 = 0, y1 = 1, yref = "paper",
+             line = list(color = "red",  dash = "dash", width = 1.5)),
+        list(type = "line",
+             x0 = st$median, x1 = st$median,
+             y0 = 0, y1 = 1, yref = "paper",
+             line = list(color = "blue", dash = "dot",  width = 1.5))
+      )
+    )
+}
+
+# build 4 charts
+plots <- mapply(make_hist, vars, stats_list, SIMPLIFY = FALSE)
+
+# combine into 2x2
+histogram_panel <- subplot(plots[[1]], plots[[2]], plots[[3]], plots[[4]],
+        nrows  = 2, shareX = FALSE, shareY = FALSE,
+        titleX = TRUE, titleY = TRUE, margin = 0.1
+) %>%
+  layout(
+    title      = list(text = "Distribution of Key Numerical Variables", 
+                      font = list(size = 15)),
+    showlegend = FALSE
+  )
+
+
 ## (a) bonus score
 ## ----------------
 bonus_score <- data_fe %>%
@@ -145,19 +251,32 @@ bonus_score <- data_fe %>%
 
 ## (b) policy type
 ## ----------------
-policy_type <- data_fe %>%
-  mutate(policy_label = recode(policy_type, !!!policy_type_labels)) %>%
-  count(age_band, policy_label) %>%
-  group_by(age_band) %>%
-  mutate(pct = n / sum(n)) %>%
-  ggplot(aes(x = age_band, y = pct, fill = policy_label)) +
-  geom_bar(stat = "identity") +
-  scale_y_continuous(labels = scales::percent) +
-  scale_fill_brewer(palette = "Set2") +
-  theme_minimal() +
-  labs(title    = "Policy Type by Driver Age Band",
-       subtitle = "Do older drivers choose more comprehensive coverage?",
-       x = "Age Band", y = "Proportion", fill = "Policy Type")
+policy_type <- ggbarstats(
+  data       = data_fe %>%
+    mutate(policy_label = recode(policy_type, !!!policy_type_labels)),
+  x          = policy_label,
+  y          = age_band,
+  title      = "Policy Type by Driver Age Band",
+  subtitle   = "χ² test of independence — Cramér's V as effect size",
+  xlab       = "Age Band",
+  ylab       = "Count",
+  label      = "percentage",
+  bf.message = FALSE,
+  package    = "RColorBrewer",
+  palette    = "Set2",
+  ggtheme    = theme_minimal(base_size = 14),   # bumps all text up
+  ggplot.component = list(
+    theme(
+      plot.margin      = margin(t = 10, r = 10, b = 30, l = 10),
+      axis.text.x      = element_text(size = 13),  # age band labels
+      axis.text.y      = element_text(size = 13),  # y-axis numbers
+      axis.title       = element_text(size = 14),  # axis titles
+      plot.title       = element_text(size = 15),  # chart title
+      plot.subtitle    = element_text(size = 11),  # stats line
+      legend.text      = element_text(size = 11)   # legend entries
+    )
+  )
+)
 
 ## (c) claim frequency
 ## --------------------
@@ -192,7 +311,7 @@ data_fe %>%
 
 ## (e) loss-ratio
 ## ---------------
-loss_ratio <- data_fe %>%
+p1<- data_fe %>%
   mutate(policy_label = recode(policy_type, !!!policy_type_labels)) %>%
   group_by(year, policy_label) %>%
   summarise(loss_ratio = sum(total_incurred) / sum(total_premium), 
@@ -208,9 +327,36 @@ loss_ratio <- data_fe %>%
        subtitle = "Which policy types are becoming more/less profitable?",
        x = "Year", y = "Loss Ratio", color = "Policy Type")
 
+# Right panel — Kruskal-Wallis across policy types
+p2 <- data_fe %>%
+  mutate(policy_label = recode(policy_type, !!!policy_type_labels)) %>%
+  filter(!is.na(loss_ratio),
+         loss_ratio <= quantile(loss_ratio, 0.99, na.rm = TRUE)) %>%
+  sample_n(min(5000, n())) %>%
+  ggbetweenstats(
+    x                = policy_label,
+    y                = loss_ratio,
+    type             = "nonparametric",
+    pairwise.display = "significant",
+    bf.message       = FALSE,
+    title            = "Statistical Validation",
+    subtitle         = "Kruskal-Wallis — loss ratio across policy types",
+    xlab             = "Policy Type",
+    ylab             = "Loss Ratio",
+    ggtheme          = theme_minimal(base_size = 11),
+    ggplot.component = list(
+      scale_x_discrete(labels = function(x) stringr::str_wrap(x, width = 12)),
+      coord_cartesian(ylim = c(0, 2))
+    )
+  )
+loss_ratio <- p1 | p2
+
+
+
 ## (f) driving experience
 ## -----------------------
-driving_experience1 <- data_fe %>%
+# Left panel — existing aggregated bar chart
+p1 <- data_fe %>%
   group_by(age_band, exp_band) %>%
   summarise(claim_freq = sum(total_claims) / sum(total_exposure), 
             .groups = "drop") %>%
@@ -222,6 +368,31 @@ driving_experience1 <- data_fe %>%
        subtitle = "Does experience reduce claims independently of age?",
        x = "Driving Experience", y = "Claims per Exposure Year", 
        fill = "Age Band")
+
+# Right panel — Kruskal-Wallis test
+p2 <- data_fe %>%
+  filter(total_exposure > 0, !is.na(exp_band)) %>%
+  mutate(policy_claim_freq = total_claims / total_exposure) %>%
+  filter(policy_claim_freq <= quantile(policy_claim_freq, 0.99)) %>%  # trim outliers
+  sample_n(5000) %>%
+  ggbetweenstats(
+    x                = exp_band,
+    y                = policy_claim_freq,
+    type             = "nonparametric",
+    pairwise.display = "significant",
+    title            = "Statistical Validation",
+    subtitle         = "Kruskal-Wallis with pairwise Dunn post-hoc (Bonferroni corrected)",
+    xlab             = "Driving Experience",
+    ylab             = "Claim Frequency",
+    ggtheme          = theme_minimal(base_size = 12),   # increases all text
+    ggplot.component = list(
+      coord_cartesian(ylim = c(0, 2)),                  # caps y-axis
+      theme(plot.subtitle = element_text(size = 9))     # subtitle slightly smaller
+    )
+  )
+
+driving_experience1 <- p1 | p2
+
 
 ## 5. Charts for Risk-Return Analysis
 ## --------------------------------------
@@ -797,6 +968,7 @@ coverage_colours <- c(
 ## #1 Claim Frequency
 ## -------------------
 # CHART 1 — Claim Frequency by Coverage Type over Time
+# CHART 1 — Claim Frequency by Coverage Type over Time
 p_freq <- ggplot(deep_freq_lines,
                  aes(x     = year,
                      y     = claim_freq,
@@ -817,8 +989,44 @@ p_freq <- ggplot(deep_freq_lines,
     color    = "Coverage Type"
   )
 
+# Left panel — existing line chart (keep as p1)
+p1 <- p_freq   # your existing chart object
+
+# Right panel — Kruskal-Wallis across coverage types
+p2 <- data_fe %>%
+  filter(policy_type == "COMP_N",
+         age_band %in% c("Under 25", "25-34", "35-44", "65+")) %>%
+  select(age_band,
+         Property       = property_claims,
+         Fire           = fire_claims,
+         Theft          = theft_claims,
+         Glass          = glass_claims,
+         Liability      = liability_claims,
+         total_exposure) %>%
+  pivot_longer(cols      = c(Property, Fire, Theft, Glass, Liability),
+               names_to  = "coverage_type",
+               values_to = "claims") %>%
+  mutate(claim_freq = claims / total_exposure) %>%
+  filter(claim_freq > 0) %>%
+  sample_n(min(5000, n())) %>%    # never exceeds available rows
+  ggbetweenstats(
+    x                = coverage_type,
+    y                = claim_freq,
+    type             = "nonparametric",
+    pairwise.display = "significant",
+    bf.message       = FALSE,
+    title            = "Statistical Validation",
+    subtitle         = "Kruskal-Wallis — claim frequency across coverage types",
+    xlab             = "Coverage Type",
+    ylab             = "Claim Frequency",
+    ggtheme          = theme_minimal(base_size = 12)
+  )
+
+p_freq1 <- p1 | p2
+
 ## #2 Claim Severity
 ## ----------------------
+# CHART 2 — Claim Severity by Coverage Type over Time
 # CHART 2 — Claim Severity by Coverage Type over Time
 p_sev <- ggplot(deep_sev_lines,
                 aes(x     = year,
@@ -834,12 +1042,61 @@ p_sev <- ggplot(deep_sev_lines,
   theme_minimal() +
   theme(legend.position = "bottom") +
   labs(
-    title    = "Claim Severity by Coverage Type — Comprehensive (No Excess)",
+    title    = "Claim Severity by Coverage Type",
     subtitle = "Loss-making age bands only",
     x        = "Year",
     y        = "Average Cost per Claim",
     color    = "Coverage Type"
   )
+
+# Left panel — existing severity line chart
+p1 <- p_sev
+
+# Right panel — Kruskal-Wallis across coverage types for severity
+p2 <- data_fe %>%
+  filter(policy_type == "COMP_N",
+         age_band %in% c("Under 25", "25-34", "35-44", "65+")) %>%
+  select(age_band,
+         Property            = property_incurred,
+         Fire                = fire_incurred,
+         Theft               = theft_incurred,
+         Glass               = glass_incurred,
+         Liability           = liability_incurred,
+         LiabilityInjury     = liability_injury_incurred,
+         property_claims,
+         fire_claims,
+         theft_claims,
+         glass_claims,
+         liability_claims,
+         liability_injury_claims) %>%        # add this
+  mutate(
+    Property        = ifelse(property_claims        > 0, Property        / property_claims,        NA),
+    Fire            = ifelse(fire_claims            > 0, Fire            / fire_claims,            NA),
+    Theft           = ifelse(theft_claims           > 0, Theft           / theft_claims,           NA),
+    Glass           = ifelse(glass_claims           > 0, Glass           / glass_claims,           NA),
+    Liability       = ifelse(liability_claims       > 0, Liability       / liability_claims,       NA),
+    LiabilityInjury = ifelse(liability_injury_claims > 0, LiabilityInjury / liability_injury_claims, NA)
+  ) %>%
+  select(age_band, Property, Fire, Theft, Glass, Liability, LiabilityInjury) %>%
+  pivot_longer(cols      = c(Property, Fire, Theft, Glass, Liability, LiabilityInjury),
+               names_to  = "coverage_type",
+               values_to = "claim_sev") %>%
+  filter(!is.na(claim_sev)) %>%
+  sample_n(min(5000, n())) %>%
+  ggbetweenstats(
+    x                = coverage_type,
+    y                = claim_sev,
+    type             = "nonparametric",
+    pairwise.display = "significant",
+    bf.message       = FALSE,
+    title            = "Statistical Validation",
+    subtitle         = "Kruskal-Wallis — claim severity across coverage types",
+    xlab             = "Coverage Type",
+    ylab             = "Claim Severity (€ per Claim)",
+    ggtheme          = theme_minimal(base_size = 12)
+  )
+
+p_sev1 <- p1 | p2
 
 ## #3 Composition
 ## ---------------
@@ -964,69 +1221,65 @@ deep_exp_lr <- deep_exp_lr %>%
 
 ## #1 Driving Experience — native plot_ly()
 ## ------------------------------------------
-portfolios  <- unique(deep_exp_avg$portfolio)
-port_colors <- c("Loss-Making" = "#F44336", "Profitable" = "#4CAF50")
-
-driving_experience <- plot_ly()
-
-for (p in portfolios) {
-  df <- deep_exp_avg %>% filter(portfolio == p)
-  
-  # confidence interval ribbon
-  driving_experience <- driving_experience %>%
-    add_trace(
-      data      = df,
-      x         = ~c(year, rev(year)),
-      y         = ~c(se_upper, rev(se_lower)),
-      type      = "scatter",
-      mode      = "lines",
-      fill      = "toself",
-      fillcolor = ifelse(p == "Loss-Making",
-                         "rgba(244,67,54,0.15)",
-                         "rgba(76,175,80,0.15)"),
-      line       = list(color = "transparent"),
-      showlegend = FALSE,
-      hoverinfo  = "skip",
-      name       = paste0(p, " CI")
-    )
-  
-  # main line + points
-  driving_experience <- driving_experience %>%
-    add_trace(
-      data   = df,
-      x      = ~year,
-      y      = ~mean_exp,
-      type   = "scatter",
-      mode   = "lines+markers",
-      name   = p,
-      color  = I(port_colors[p]),
-      line   = list(width = 2),
-      marker = list(size = 8),
-      text   = ~paste0(
-        "Portfolio: ",       portfolio,          "<br>",
-        "Year: ",            year,               "<br>",
-        "Mean Experience: ", round(mean_exp, 2), " yrs", "<br>",
-        "Policy Count: ",    policy_count
-      ),
-      hoverinfo = "text"
-    )
-}
-
-driving_experience <- driving_experience %>%
-  layout(
-    title = list(
-      text = "Average Driving Experience — Loss-Making vs Profitable Portfolio",
-      font = list(size = 14)
-    ),
-    xaxis = list(
-      title    = "Year",
-      tickvals = unique(deep_exp_avg$year),
-      ticktext = as.character(unique(deep_exp_avg$year))
-    ),
-    yaxis     = list(title = "Mean Driving Experience (Years)"),
-    legend    = list(orientation = "h", y = -0.2),
-    hovermode = "closest"
+p_exp_avg <- deep_exp_avg %>%
+  ggplot(aes(x     = year,
+             y     = mean_exp,
+             color = portfolio,
+             group = portfolio,
+             text  = paste0(
+               "Portfolio: ",       portfolio,          "<br>",
+               "Year: ",            year,               "<br>",
+               "Mean Experience: ", round(mean_exp, 2), " yrs", "<br>",
+               "Policy Count: ",    policy_count
+             ))) +
+  geom_ribbon(aes(ymin = se_lower, ymax = se_upper, group = portfolio),
+              fill = ifelse(deep_exp_avg$portfolio == "Loss-Making",
+                            "#F44336", "#4CAF50"),
+              alpha = 0.15, color = NA, show.legend = FALSE) +
+  geom_line(linewidth = 1) +
+  geom_point(size = 3) +
+  scale_x_continuous(breaks = unique(deep_exp_avg$year)) +
+  scale_color_manual(values = c("Loss-Making" = "#F44336",
+                                "Profitable"  = "#4CAF50")) +
+  theme_minimal() +
+  theme(legend.position = "bottom") +
+  labs(
+    title    = "Average Driving Experience — Loss-Making vs Profitable Portfolio",
+    subtitle = "Comprehensive (No Excess) | Shaded band = 95% confidence interval",
+    x        = "Year",
+    y        = "Mean Driving Experience (Years)",
+    color    = "Portfolio"
   )
+p_exp_avg_ly <- ggplotly(p_exp_avg, tooltip = "text") %>%
+  layout(legend = list(orientation = "h", y = -0.2))
+
+# ── Right panel — Mann-Whitney U test ─────────────────────────────────────────
+p_test <- data_fe %>%
+  filter(policy_type == "COMP_N", !is.na(driving_exp_proxy)) %>%
+  mutate(portfolio = ifelse(age_band %in% loss_making_bands,
+                            "Loss-Making", "Profitable")) %>%
+  filter(driving_exp_proxy <= quantile(driving_exp_proxy, 0.99)) %>%
+  sample_n(5000) %>%
+  ggbetweenstats(
+    x                = portfolio,
+    y                = driving_exp_proxy,
+    type             = "nonparametric",
+    title            = "Statistical Validation",
+    subtitle         = "Mann-Whitney U test",
+    xlab             = "Portfolio",
+    ylab             = "Driving Experience (Years)",
+    ggtheme          = theme_minimal(base_size = 12)
+  )
+
+p_test_ly <- ggplotly(p_test)
+
+# ── Side by side via htmltools ─────────────────────────────────────────────────
+driving_experience <- htmltools::div(
+  style = "display: flex; gap: 16px;",
+  htmltools::div(style = "flex: 1; min-width: 0;", p_exp_avg_ly),
+  htmltools::div(style = "flex: 1; min-width: 0;", p_test_ly)
+)
+
 
 ## #2 Experience Mix — ggplotly
 ## -----------------------------

@@ -18,28 +18,14 @@ format:
     controls-layout: bottom-right
 ---
 
-## Contents
-
--   1. Portfolio Overview
--   2. Policyholder Characteristics and Claims Behaviour
--   3. Risk-Return Analysis
--   4. Deep-dive on Loss-making Portfolios
--   5. At-Risk Portfolio Sensitivity & Scenario Analysis\
--   6. Conclusion
-
-```{r}
-#| include: false
-source("dataPrep_motor_insurance_slides.R")  # loads all data AND chart objects
-```
-
-::: notes
-Using a real-world dataset from the motor insurance domain and R visual analytics libraries, this research investigates numerical, categorical and temporal data to identify factors influencing portfolio profitability and volatility.
-:::
-
-
 ## 1. Portfolio Overview
 
 ### Policyholders are mostly of medium risk-appetite, with risk-averse and risk-tolerant segments on either side
+
+```{r}
+#| include: false
+source("dataPrep_motor_insurance_slides.R")  # loads all data AND chart 
+```
 
 ```{r}
 policy_profile  
@@ -51,9 +37,22 @@ policy_profile
 :::
 
 ::: notes
+* Using a real-world dataset from the motor insurance domain and R visual analytics libraries, this research investigates numerical, categorical and temporal data to identify factors influencing portfolio profitability and volatility.
 * The faceted bar charts suggest that the overall porfolio is dominated by policyholders with favorable claims histories, and that most are paying their premiums annually. Active policies vastly outnumber cancelled policies. 
 
 * In terms of policy types, ‘Third-party + Combined’ is most popular followed by ‘Comprehensive (With Excess)’ and ‘Third-Party + Glass’. This may imply that policyholders are mostly of medium risk-appetite, with risk-averse and risk-tolerant segments on either side. Majority of the policies are coming from new business and renewals constitute about a third of total policies.
+:::
+
+## 2. Policyholder Characteristics and Claims Behaviour
+
+### Vehicle value and total premiums appear to be right-skewed indicating that a small number of high-value policies pull the mean above the median
+
+```{r}
+histogram_panel
+```
+::: {style="font-size: 0.4em; margin-top: 0.5em;"}
+* From the histogram panel, Driver Age and Driving Experience exhibit near-symmetric distributions, whereas Vehicle Value and Total Premium are markedly right-skewed. 
+* This reflects a common insurance portfolio pattern in which a small proportion of high-value policies drives the mean above the median.
 :::
 
 ## 2. Policyholder Characteristics and Claims Behaviour
@@ -66,12 +65,13 @@ policy_type
 ::: {style="font-size: 0.4em; margin-top: 0.5em;"}
 * Drivers aged 25 and above consistently show a higher preference for Comprehensive (No Excess) policies compared to drivers under 25.
 * While Comprehensive (With Excess) policies are most common among drivers aged 25–64, the 65+ group shifts towards Third-Party + Combined coverage, suggesting a preference for lower-cost insurance, possibly due to retirement income constraints or lower vehicle values.
+* Although the association between age band and policy type is statistically significant (χ²(20) = 1198.30, p < 0.001), the effect size is negligible (Cramér’s V = 0.03), indicating that age has little practical influence on policy choice, with Third-Party + Combined dominating across all age groups.
 :::
 
 ::: notes
 * We noted that proportion of ‘Comprehensive (No Excess)’, the policy with the highest coverage, is higher and remains relative constant for those aged 25 and above as compared to those under 25.
-
 * However, the proportion of ‘Comprehensive (With Excess)’, the policy with the second highest coverage, is higher for those aged between 25 to 64. Interestingly, the 65+ band bucks the trend — the combined proportion of Comprehensive policies (both With and Without Excess) is lower than the 25-64 bands, with ‘Third-Party + Combined’ reasserting dominance. This implies that older drivers may be switching to lower-cost policies, perhaps because their income is lower when they are retired or because their vehicles are worth less. Collectively, this makes higher coverage less economically attractive for this group.
+* In terms of statistical validation, we note that while the association between age band and policy type is statistically significant (χ²(20) = 1198.30, p < 0.001). However, the negligible effect size (Cramér’s V = 0.03) indicates that age band is a weak predictor of policy type choice in practice — the portfolio composition remains dominated by Third-Party + Combined across all age groups.
 :::
 
 ## 2. Policyholder Characteristics and Claims Behaviour
@@ -82,13 +82,14 @@ loss_ratio
 ```
 
 ::: {style="font-size: 0.4em; margin-top: 0.5em;"}
-Profitability has deteriorated across all policy types. Most notably, the loss ratio for Comprehensive (No Excess) rose from over 70% in 2022 to above 100% in 2024, meaning claims now exceed premiums.
+* Profitability has deteriorated across all policy types. Most notably, the loss ratio for Comprehensive (No Excess) rose from over 70% in 2022 to above 100% in 2024, meaning claims now exceed premiums.
+* The Kruskal-Wallis test shows significant differences in loss ratios across policy types (χ²(4) = 81.03, p < 0.001), though the effect is small (ε² = 0.02). The higher loss ratio for Comprehensive (No Excess) is driven by a small number of costly claims rather than widespread losses.
 :::
 
 ::: notes
 * This chart looks at profitability of different policy types over time. It is evident that motor policies are getting less profitable for insurers across all categories. This reflects changing frequency and severity of claims over time. 
-
 * Most striking of all, the increase in costs is most prominent for ‘Comprehensive (No Excess)’ category, the policy with highest coverage. The loss ratio, defined as sum of total incurred divided by the sum of total premium, from 70+ percent in 2022 to over 100 percent in 2024. This suggest that the insurer is now paying out more in claims than it collects in premiums for this product. Notably, Third-Party + Combined briefly bucked the trend with a dip in 2023 before continuing its upward trajectory in 2024.
+* The Kruskal-Wallis test confirms loss ratios differ significantly across policy types (χ²(4) = 81.03, p < 0.001), though the small effect size (ε² = 0.02) reflects that at the individual policy level most policies record zero claims — the deteriorating portfolio-level loss ratio of Comprehensive (No Excess) is driven by a concentrated subset of high-cost claims rather than broad across-the-board losses
 :::
 
 ## 2. Policyholder Characteristics and Claims Behaviour
@@ -108,11 +109,13 @@ driving_experience1
 ::: {style="font-size: 0.4em; margin-top: 0.5em;"}
 * Less driving experience generally corresponds to higher claim frequency.
 * Drivers aged 55–64 with ≤2 years of experience have the highest claim frequency (>90%).
+* However, the negligible effect size (ε² = 0.00388) shows that driving experience is a statistically significant but practically weak predictor of claim frequency.
 :::
 
 ::: notes
 * driving experience, or the lack thereof, correlates with higher claim frequency across almost all age-bands, with the exception of ‘65+’ with less than 2 years of driving experience.
 * amongst those who have 2 years or less driving experience, drivers with ‘55-64’ age-band has the highest claim frequency exceeding well above 90 percent.
+* however, the negligible effect size (ε² = 0.00388, below the 0.01 small-effect threshold) confirms that driving experience accounts for less than 0.4% of the variance in claim frequency — a statistically real but practically insignificant predictor
 :::
 
 ## 3. Risk-Return Analysis
@@ -154,37 +157,38 @@ trend_chart
 
 ### Claim frequency - Property claims consistently record the highest frequency with rising trend
 ```{r}
-p_freq
+p_freq1
 ```
 
 ::: {style="font-size: 0.4em; margin-top: 0.5em;"}
 * Across all loss-making age bands, Property claims have the highest frequency and show a sharp increase, especially from 2023 to 2024.
-* This suggests Property damage is the main driver of rising claim frequency in the Comprehensive (No Excess) portfolio.
+* This suggests Property damage is the main driver of rising claim frequency in the Comprehensive (No Excess) portfolio. This is confirmed statistically by the Krusal-Wallis Test.
+
 :::
 
 ::: notes
 * This faceted chart examines claim frequency by coverage type across the four loss-making age bands — Under 25, 25-34, 35-44, and 65+. Across all four bands, Property claims consistently record the highest frequency and exhibit a sharp upward trend, most pronounced between 2023 and 2024.
-
 * This points to Property damage as the primary driver of rising claim frequency within the ‘Comprehensive (No Excess)’ portfolio, and warrants closer examination in terms of both pricing adequacy and claims management.
+* The Kruskal-Wallis test confirms that claim frequency differs significantly across coverage types (χ²(4) = 560.97, p < 0.001, ε² = 0.16), with Property claims statistically distinguishable from all other coverage types — formally validating it as the dominant driver of claim frequency within the loss-making portfolio.
 :::
 
 ## 4. Deep-dive on Loss-making Portfolio
 
-### Claim severity - ‘Liability Injury’ and ‘Fire’ claims appeared to be the main claims driving cost pressures within the portfolio
+### Claim severity - ‘Liability Injury’ and ‘Fire’ claims appeared to be the main claims driving cost pressures within the Comprehensive (No Excess) portfolio
 ```{r}
-p_sev
+p_sev1
 ```
 ::: {style="font-size: 0.4em; margin-top: 0.5em;"}
 * Liability Injury claims are the most severe for the 25–34 and 65+ groups, peaking in 2023 before declining in 2024.
-* For the 35–44 group, Fire claims tripled from around €5,000 in 2022 to €15,000 in 2024, making them a growing severity concern.
+* For the 35–44 group, Fire claims tripled from around €5,000 in 2022 to €15,000 in 2024, making them a growing severity concern.The Kruskal-Wallis test confirms significant severity differences (χ²(5) = 188.84, p < 0.001), with Liability Injury and Fire claims being the most costly coverage types.
 :::
 
 ::: notes
 This chart examines claim severity by coverage type over time, faceted by the different age-bands in the loss-making portfolios. This identifies which coverage type is most expensive per claim. From the charts, we note the following patterns:
 
 * ‘Liability Injury’ claims are the most expensive claims made by those in ‘25-34’ and ‘65+’ groups. This appear to be following an inverted U-shape — rising sharply to peak in 2023 before declining in 2024. This suggests large bodily injury settlements may have been concentrated in that period.
-
 * ‘Fire’ related claims appeared to be increasing at an alarming rate for the ‘35-44’ age band, rising from slightly below €5,000 per claim on average in 2022 to about €15,000 on average per claim in 2024. This is a threefold increase over three years!
+* The Kruskal-Wallis test confirms severity differences are statistically significant (χ²(5) = 188.84, p < 0.001), with LiabilityInjury (median €1,886) and Fire (median €2,457) the most costly coverage types — both statistically distinguishable from Glass, Property and Theft — formally validating the alarming cost trends identified above
 :::
 
 
@@ -195,7 +199,8 @@ This chart examines claim severity by coverage type over time, faceted by the di
 driving_experience
 ```
 ::: {style="font-size: 0.4em; margin-top: 0.5em;"}
-Drivers in loss-making Comprehensive (No Excess) segments are consistently less experienced than those in profitable segments, averaging 8–10 fewer years of driving experience between 2022 and 2024.
+* Drivers in loss-making Comprehensive (No Excess) segments are consistently less experienced than those in profitable segments, averaging 8–10 fewer years of driving experience between 2022 and 2024.
+* Loss-making policyholders have significantly less driving experience (median ~19 years) than profitable ones (median ~30 years), a difference confirmed statistically by the Mann-Whitney U test.
 :::
 
 ::: notes
