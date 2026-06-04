@@ -1,0 +1,2260 @@
+---
+title: "Take-Home Exercise 2: Vast Challenge 2026 - MC1"
+author: "Andy Tai"
+date: "05/13/2026"
+date-modified: last-modified
+format: 
+  html:
+    theme: lumen
+    toc: true
+    toc-depth: 3
+    number-sections: false
+    html-math-method: katex
+    css: [styles.css, styles_mc1.css]
+editor: source
+execute: 
+  eval: true
+  echo: true
+  warning: false
+  message: false
+  freeze: true
+---
+
+## 1 Overview
+xxx
+
+## 2 Importing libraries, understanding and processing data
+
+:::: {.panel-tabset}
+
+### (a) Install libraries
+
+We shall import tidyverse and other useful R libraries to aid our analysis.
+
+```{r}
+#| echo: true
+#| code-fold: show 
+#| message: false
+#| results: hide
+
+pacman::p_load(tidyverse, patchwork, ggrepel, ggiraph, DT, 
+  gifski, plotly, gganimate, ggpp, ggtext, ggdist, ggridges, colorspace, geomtextpath, nord, nortest, seriation, dendextend, heatmaply, ggstatsplot, jsonlite, janitor, listviewer, gt, lubridate, scales, tidytext, proxy, cluster, wordcloud2, htmlwidgets, ggwordcloud, stringr, DiagrammeR, tidygraph, ggraph, igraph, kableExtra) 
+```
+
+### (b) Import & understand data
+
+As json file structure - comprising of key-value pairs - can be complex with many levels, we write a function that determine the json depth.
+
+#### (i) Finding how deep is our data
+
+Json data appears to have 5 levels of key-value pairs.
+```{r}
+raw <- fromJSON("data/vast2026/MC1_final_00.json")
+
+## find how many levels
+## -------------------------
+# Function to calculate max depth of a nested list
+max_depth <- function(x) {
+  if (!is.list(x) || length(x) == 0) return(0)
+  1 + max(sapply(x, max_depth))
+}
+
+cat('max. depth: ', max_depth(raw))   # 5 <-- tells you exactly how deep to set max.level
+```
+
+
+#### (ii) Exploring the json file structure using jsonedit from listviewer
+
+Next, we use `jsonedit` from `listviewer` library to explore the json data using an interactive JSON viewer. We can simply click on the 'little triangle' to expand the various key(s) and explore their corresponding value(s).
+```{r}
+#| echo: true
+jsonedit(raw)
+```
+#### (iii) key components of the data
+The following points are gathered after exploring the data:
+
+* the data the captured internal communications from 2 weeks leading to the breach comprises 4 main components, each with 23 unique items.
+
+* 1) **`hour`** - contains the yyyy-mm-dd T hh:mm:ss. The year 2046 appears to be a fictional future scenario.
+
+* 2) **`environment_context`** - captures environmental sensing data, and they comprises the following sub-components:
+  * `event_narrative` and `event_headline` - appears to be key events captured during the period.
+  * `market_snapshot` - tracks movement, changes, and sentiments of company stock price.
+  * `media_events` - tracks key events and annoucements in the industry.
+  * `social_state`- refers to scans of social media feed linked to the company.
+  * `news` - appear to be news directly related to the company.
+  * Others: `external_actor_actions`, `social_manager_alerts`, `agents_unavailable`, `critical_deadlines`.
+  
+* 3) **`communications`** - captures the message id, specific agents, communication channels and internal state. The most interesting ones are:
+  * `internal_state` / `deliberating` -  as it captures the agents' thinking process.
+  * `content` - appears to be minutes of meeting captured in comms' huddle.
+  
+* 4) **`participants`** - captures specific agents data, such as their id and roles.
+
+#### (iv) Deep Search for all players
+Not all players are apparent in the json file as a few of them only appear later in the time horizon. Hence, we write a function that searches through all unique players in the json file.
+```{r}
+raw <- fromJSON("data/vast2026/MC1_final_00.json", simplifyVector = FALSE)
+
+messages_tbl <- map_dfr(raw$rounds, function(r) {
+  round_hour <- ymd_hms(r$hour)
+  map_dfr(r$communications, function(m) {
+    ist <- m$internal_state %||% list()
+    tibble(
+      round_hour   = round_hour,
+      timestamp    = ymd_hms(m$timestamp),
+      agent_id     = m$agent_id     %||% NA_character_,
+      agent_label  = m$agent_label  %||% NA_character_,
+      channel      = m$channel      %||% NA_character_,
+      message_type = m$message_type %||% NA_character_,
+      recipients   = list(unlist(m$recipients %||% list("ALL"))),
+      content      = m$content      %||% NA_character_,
+      deliberating = ist$deliberating %||% NA_character_,
+      reacting     = ist$reacting     %||% NA_character_,
+      rationalizing= ist$rationalizing %||% NA_character_
+    )
+  })
+})
+
+messages_tbl %>%
+  distinct(agent_id) %>%
+  arrange(agent_id)
+```
+
+In summary, the players are:
+
+* `intern_agent` - general intern.
+* `judge_agent` - Compliance Officer, in charge of evaluating risks, mediates conflicts, and provides compliance guidance. Incidentally, this was mislabeled as `judge_eval_agent` in the data description document.
+* `legal_agent` - General Legal counsel.
+* `pr_agent` - Head of Communications and Public Relationships, in charge of PR
+* `pr_intern_agent` - PR team intern with access to the official TenantThread Flex account.
+* `quality_agent` - VP of Platform Trust & Safety.
+* `social_media_agent` - Social-Manager in charge of social media messaging
+
+#### (v) Important dates
+There are three important dates - start date, crisis date (where embargo ends), and end date - and we shall write a function to help us search through the data for these exact dates and time. The embargo date is also an important event, and it shall be analysed in greater detail in the section 3.
+
+```{r}
+# Start date: first round in the dataset
+start_date <- ymd_hms(raw$rounds[[1]]$hour)
+
+## Embargo was first mentioned in official channel (comms_huddle)
+## -------------------------------------------------------------
+## Find formal embargo declaration — announced in comms_huddle
+# map_dfr(raw$rounds, function(r) {
+#   map_dfr(r$communications, function(m) {
+#     content <- str_to_lower(m$content %||% "")
+#     if (str_detect(content, "embargo") &
+#         m$channel %in% c("comms_huddle", "official_post")) {
+#       tibble(
+#         hour    = ymd_hms(r$hour),
+#         agent   = m$agent_id %||% NA_character_,
+#         channel = m$channel  %||% NA_character_,
+#         content = str_trunc(m$content %||% "", 300)
+#       )
+#     }
+#   })
+# }) %>%
+#   arrange(hour)
+# 
+# embargo_date <- map_dfr(raw$rounds, function(r) {
+#   round_hour <- ymd_hms(r$hour)
+#   has_embargo <- any(map_lgl(r$communications, function(m) {
+#     content <- str_to_lower(m$content %||% "")
+#     # only count public announcement, not private deliberation
+#     str_detect(content, "embargo") &
+#       m$channel %in% c("comms_huddle", "official_post")
+#   }))
+#   tibble(hour = round_hour, has_embargo = has_embargo)
+# }) %>%
+#   filter(has_embargo) %>%
+#   slice_min(hour, n = 1) %>%
+#   pull(hour)
+
+## Embargo date: first round where "embargo" appears in content or deliberating
+## ------------------------------------------------------------------------------
+# embargo_date <- map_dfr(raw$rounds, function(r) {
+#   round_hour <- ymd_hms(r$hour)
+#   has_embargo <- any(map_lgl(r$communications, function(m) {
+#     content <- str_to_lower(m$content %||% "")
+#     delib   <- str_to_lower(
+#       (m$internal_state %||% list())$deliberating %||% ""
+#     )
+#     str_detect(content, "embargo") | str_detect(delib, "embargo")
+#   }))
+#   tibble(hour = round_hour, has_embargo = has_embargo)
+# }) %>%
+#   filter(has_embargo) %>%
+#   slice_min(hour, n = 1) %>%
+#   pull(hour)
+
+# Crisis date: first round where multiple hourly rounds occur on same day
+# (Crisis Day has hourly rounds vs daily rounds pre-crisis)
+crisis_date <- map_dfr(raw$rounds, function(r) {
+  tibble(hour = ymd_hms(r$hour), date = as.Date(ymd_hms(r$hour)))
+}) %>%
+  count(date) %>%
+  filter(n > 1) %>%
+  slice_min(date, n = 1) %>%
+  mutate(hour = ymd_hms(paste(date, "09:00:00"))) %>%
+  pull(hour)
+
+
+# End date: last round in the dataset
+end_date <- ymd_hms(raw$rounds[[length(raw$rounds)]]$hour)
+
+# ── Print to verify ──────────────────────────────────────────────────────────
+cat("Start date:  ", format(start_date,   "%d %b %Y %H:%M"), "\n")
+#cat("Embargo date:", format(embargo_date, "%d %b %Y %H:%M"), "\n")
+cat("Crisis date: ", format(crisis_date,  "%d %b %Y %H:%M"), "\n")
+cat("End date:    ", format(end_date,     "%d %b %Y %H:%M"), "\n")
+```
+
+### (c) Data Wrangling
+
+The data file is in json format, and analysing that is tricky given that many key pieces of information that are related to one another are stored in different layers. Hence, we first identify the key pieces and lay them out in a flat table to facilitate analysis.
+
+The following code checks for potential problems - namely, missing values and duplicative data - and then proceed to filter the data based on 3 conditions:
+
+* `sentiment` contains either "negative" or "critical" tags.
+* `percent_change` has a -0.5 effect on stock price.
+* `narrative` contains key words that contain negative signals.
+
+Essentially, we want to extract the key events - especially breaches and leak signals - that impact the stock prices of TenantThread negatively. We note that there are altogether five key events that satisfy the above-mentioned criteria.
+
+```{r}
+# ============================================================
+# LOAD JSON
+# ============================================================
+
+`%||%` <- function(x, y) if (is.null(x)) y else x
+
+raw <- fromJSON(
+  "data/vast2026/MC1_final_00.json",
+  simplifyVector = FALSE
+)
+
+# ============================================================
+# 1. EXTRACT MARKET + EVENT NARRATIVE DATA
+# ============================================================
+
+stock_tbl <- map_dfr(raw$rounds, function(r) {
+  
+  ms <- r$environment_context$market_snapshot
+  
+  tibble(
+    hour = ymd_hms(r$hour), ## convert to datetime
+    price = parse_number(ms$stock_price %||% NA_character_),
+    percent_change = parse_number(ms$percent_change %||% NA_character_),
+    sentiment = str_to_lower(ms$sentiment %||% NA_character_),
+    headline = r$environment_context$event_headline %||% NA_character_,
+    narrative = r$environment_context$event_narrative %||% NA_character_
+  )
+  
+}) %>%
+  mutate(t = row_number())
+
+# ============================================================
+# 2. DATA QUALITY CHECKS
+# ============================================================
+
+missing_check <- stock_tbl %>%
+  summarise(
+    rows = n(),
+    missing_hour = sum(is.na(hour)),
+    missing_price = sum(is.na(price)),
+    missing_percent_change = sum(is.na(percent_change)),
+    missing_sentiment = sum(is.na(sentiment)),
+    missing_narrative = sum(is.na(narrative))
+  )
+
+duplicate_check <- stock_tbl %>%
+  count(hour) %>%
+  filter(n > 1)
+
+missing_check
+duplicate_check
+
+
+## ==========================================
+## 3. CREATE LEAKAGE SIGNAL PATTERNS DETECTOR
+## ==========================================
+
+## sentiment %in% c("negative", "critical") ## <-- CONDITION 1
+## percent_change < -0.5  ## <- CONDITION 2 (HAS IMPACT ON STOCK PRICE)
+
+## CONDITION 3 - CONTAINS PARTICULAR THEMATIC KEYWORDS
+theme_dict <- tribble(
+  ~theme, ~pattern,
+  "Disclosure Risk", "leak|leakage|embargo",
+  "Anonymous Activity", "anonymous",
+  "Media Scrutiny", "journal|reporter|investigation",
+  "Privacy Exposure", "re-identification",
+  "Financial Distress", "covenant breach|distressed|sale",
+  "Merger / M&A", "merge|merger|acquisition"
+)
+
+## =================================
+## 4. FILTERING BASED ON CONDITIONS
+## =================================
+risk_theme_tbl <- stock_tbl %>%
+  ## handles missing values before mutate
+    filter(
+    !is.na(price),
+    !is.na(percent_change),
+    !is.na(sentiment),
+    !is.na(narrative)
+  ) %>%
+  mutate(
+    narrative_lower = str_to_lower(narrative),
+    bad_sentiment = sentiment %in% c("negative", "critical"),
+    large_drop = percent_change < -0.5
+  ) %>%
+  tidyr::crossing(theme_dict) %>%
+  mutate(
+    theme_match = str_detect(narrative_lower, pattern)
+  ) %>%
+  filter(
+    bad_sentiment,
+    large_drop,
+    theme_match
+  ) %>%
+  group_by(hour, price, percent_change, sentiment, headline, narrative) %>%
+  summarise(
+    themes = paste(unique(theme), collapse = "; "),
+    .groups = "drop"
+  ) %>%
+  arrange(hour)
+
+risk_theme_tbl
+```
+
+::::
+
+## 3 Visualise sequence of key events and relationships that led up to inappropriate release
+
+In this section, we shall examine the string of key events that led to the leakage of the merger. To do so, we shall produce the following visualisations and tables:
+
+* (a) An **interactive data table** to first explore the data and find out when the **embargo was official implemented**.
+* (b) An **interactive data table** to search through various strategic keywords. This is essential for us to **build up a sequence of key events pre and post-embargo**.
+* (c) A **flow diagram** that help **visualise the sequence of events after embargo** based on the information extracted from the interactive data tables from tabs (a) and (b). 
+* (d) A **line chart** to visualise how key events, including leakage of sensitive internal information of TenantThread, has adversely impacted its stock price. This chart helps identify when the public first became aware of the issues surrounding TenantThread, leading to a loss of confidence and a subsequent sell-off of its shares. It also helps uncover the key triggers and market reactions that contributed to the decline in investor sentiment between two-week period prior to Crisis day.
+* (e) A **network graph** that examines the communications of the various agents right after embargo has been implemented. This can allow us to analyse communication patterns of the various players between embargo and crisis day. The purpose is to understand the roles of various players i.e., who are the decision makers, and who is driving the communications during that period.
+
+:::: {.panel-tabset}
+
+### (a) implementation of embargo
+
+The interactive data table below is gathered based on a deep keyword search through the json data for all mentions of 'embargo'. A few points stand out:
+
+* Besides the standard communication channels: 
+  * There are 2 types of public posts: "personal post", "anonymous post"
+  * Besides the 3 types of internal communication channels, which are namely: "comms huddle", "one-on-one chat", and "side-huddle", there is a 1 type of hidden communication channel that is not captured in the data file. We call this "Private / Direct Messaging". This can only be inferred from "internal_state/deliberating", and it was how CEO Ajay communicated the need for "embargo" to the Legal-Agent on 23-05-2046 at 09:00. We refer this date as the "official" date of the embargo.
+  
+* While the the need and intent of the embargo was communicated to the Legal-Agent, he never did officially declare this company-wide. Instead, he used one-on-one channel and side-huddle to communicate it to the senior management staff. The Legal-Agent did so presumably for two reasons: 1) he communicated to essential senior staff on a need to know basis, and 2) officially declaring an embargo may invite unwanted speculations.
+
+* The Legal-Agent, however, did took control of the communications flow in the company, as evidenced in the network graph, as communications appear to flow from and to the "Legal" node.
+
+```{=html}
+<style>
+  #embargo-table tbody tr:hover {
+    background-color: #d6eaf8 !important;
+    cursor: default;
+  }
+  #embargo-table thead tr th {
+    background-color: #2c3e50;
+    color: white;
+    padding: 8px;
+  }
+  #embargo-table table { 
+    border-collapse: collapse; 
+    font-size: 10px; 
+  }
+  #embargo-table td { 
+    border-bottom: 1px solid #ddd; 
+    padding: 6px; 
+    vertical-align: top;
+  }
+  .col-nowrap { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .col-wrap   { white-space: normal; word-wrap: break-word; }
+</style>
+```
+
+::: {#embargo-table}
+```{r embargo-table-search}
+#| echo: false
+
+embargo_mentions <- map_dfr(raw$rounds, function(r) {
+  map_dfr(r$communications, function(m) {
+    ist     <- m$internal_state %||% list()
+    content <- m$content        %||% ""
+    delib   <- ist$deliberating %||% ""
+    react   <- ist$reacting     %||% ""
+    ratio   <- ist$rationalizing %||% ""
+    all_text <- paste(content, delib, react, ratio)
+    if (!str_detect(str_to_lower(all_text), "embargo")) return(NULL)
+    tibble(
+      timestamp = ymd_hms(m$timestamp),
+      from      = m$agent_label %||% NA_character_,
+      to        = case_when(
+        length(unlist(m$recipients %||% list())) > 0 &
+          !all(unlist(m$recipients %||% list()) == "ALL") ~
+          paste(unlist(m$recipients), collapse = ", "),
+        m$channel == "comms_huddle"    ~ "All team",
+        m$channel == "one_on_one_chat" ~ "(private)",
+        m$channel == "side_huddle"     ~ "(small group)",
+        m$channel == "personal_post"   ~ "(public external)",
+        m$channel == "anonymous_post"  ~ "(public anonymous)",
+        TRUE ~ "ALL"
+      ),
+      channel         = m$channel %||% NA_character_,
+      found_in        = case_when(
+        str_detect(str_to_lower(content), "embargo") &
+          str_detect(str_to_lower(delib), "embargo") ~ "content + deliberating",
+        str_detect(str_to_lower(content), "embargo") ~ "content",
+        str_detect(str_to_lower(delib),   "embargo") ~ "deliberating",
+        str_detect(str_to_lower(react),   "embargo") ~ "reacting",
+        str_detect(str_to_lower(ratio),   "embargo") ~ "rationalizing",
+        TRUE ~ "other"
+      ),
+      content_excerpt = content,
+      delib_excerpt   = delib
+    )
+  })
+}) %>%
+  arrange(timestamp) %>%
+  select(timestamp, from, to, channel,
+         found_in, content_excerpt, delib_excerpt)
+
+datatable(
+  embargo_mentions,
+  rownames = FALSE,
+  filter   = "top",
+  options  = list(
+    pageLength   = 5,
+    lengthMenu   = c(5, 10, 20),
+    scrollX      = TRUE,
+    scrollY      = "400px",
+    autoWidth    = FALSE,
+    initComplete = JS("
+      function(settings, json) {
+        var api = this.api();
+        api.columns(0).nodes().to$().css('width', '110px');
+        api.columns(1).nodes().to$().css('width', '90px');
+        api.columns(2).nodes().to$().css('width', '90px');
+        api.columns(3).nodes().to$().css('width', '90px');
+        api.columns(4).nodes().to$().css('width', '80px');
+        api.columns(5).nodes().to$().css('width', '300px');
+        api.columns(6).nodes().to$().css('min-width', '400px');
+        api.columns.adjust().draw();
+      }
+    "),
+    columnDefs = list(
+      list(targets = 0, width = "110px"),
+      list(targets = 1, width = "90px"),
+      list(targets = 2, width = "90px"),
+      list(targets = 3, width = "90px"),
+      list(targets = 4, width = "80px"),
+      list(targets = 5, width = "300px"),
+      list(targets = 6, width = "400px")
+    )
+  ),
+  caption = "All embargo mentions across all rounds and fields"
+)
+```
+:::
+
+```{r embargo-date-assign}
+# Conclusion from Section 3(a) analysis above
+# Earliest communication: May 23 via side_huddle by Legal
+# No formal comms_huddle announcement was ever made
+embargo_date <- ymd_hms("2046-05-23T09:00:00")
+cat("Embargo date set to:", format(embargo_date, "%d %b %Y %H:%M"), "\n")
+```
+
+### (b) investigate precursors
+
+Aside from the table in tab (a) that zoom in on all mention of 'embargo' in the dataset, we also need a more exhaustive search for other strategic keywords so that we can build up a proper chain of key events leading up to the leakage of information. Hence, another interactive data table is created to curate these relevant messages.
+
+```{r}
+# Evidence extractor — search any keyword across all message fields
+search_messages <- function(pattern, label = "") {
+  map_dfr(raw$rounds, function(r) {
+    map_dfr(r$communications, function(m) {
+      ist     <- m$internal_state %||% list()
+      content <- m$content        %||% ""
+      delib   <- ist$deliberating %||% ""
+      react   <- ist$reacting     %||% ""
+      all_text <- str_to_lower(paste(content, delib, react))
+      
+      if (!str_detect(all_text, pattern)) return(NULL)
+      
+      tibble(
+        signal          = label,
+        timestamp       = ymd_hms(m$timestamp),
+        from            = m$agent_label %||% NA_character_,
+        channel         = m$channel     %||% NA_character_,
+        found_in        = case_when(
+          str_detect(str_to_lower(content), pattern) ~ "content",
+          str_detect(str_to_lower(delib),   pattern) ~ "deliberating",
+          TRUE ~ "reacting"
+        ),
+        content_excerpt = content,
+        delib_excerpt   = delib
+      )
+    })
+  }) %>% arrange(timestamp)
+}
+
+## filter based on bespoke keywords
+evidence_tbl <- bind_rows(
+  search_messages("strategic development|career.defining",
+                  "Strategic signal"),
+  search_messages("shadow channel",
+                  "Shadow channel"),
+  search_messages("whatever i share|interns cannot be briefed",
+                  "CEO embargo instruction"),
+  search_messages("social hold|no.*review|monitor.*not yet",
+                  "No enforcement"),
+  search_messages("elena|elenamarquez",
+                  "Elena post"),
+  search_messages("civicloom.*like|like.*civicloom",
+                  "CivicLoom exposure"),
+  search_messages("compliance monitor.*join|introducing.*monitor",
+                  "Monitor assigned")
+)
+```
+
+#### Interactive Data Table - to search through all strategic messages
+
+```{r}
+datatable(
+  evidence_tbl,
+  rownames = FALSE,
+  filter   = "top",
+  options  = list(
+    pageLength   = 5,
+    lengthMenu   = c(5, 10, 20),
+    scrollX      = TRUE,
+    autoWidth    = FALSE,
+    initComplete = JS("
+      function(settings, json) {
+        var api = this.api();
+        // set font size on entire table
+        $(api.table().node()).css('font-size', '10px');
+        // force column widths
+        api.columns(0).nodes().to$().css('min-width', '80px').css('max-width', '80px');
+        api.columns(1).nodes().to$().css('min-width', '90px').css('max-width', '90px');
+        api.columns(2).nodes().to$().css('min-width', '80px').css('max-width', '80px');
+        api.columns(3).nodes().to$().css('min-width', '80px').css('max-width', '80px');
+        api.columns(4).nodes().to$().css('min-width', '80px').css('max-width', '80px');
+        api.columns(5).nodes().to$().css('min-width', '250px');
+        api.columns(6).nodes().to$().css('min-width', '400px');
+        api.columns.adjust().draw();
+      }
+    "),
+    columnDefs = list(
+      list(targets = 0, width = "60px"),
+      list(targets = 1, width = "60px"),
+      list(targets = 2, width = "60px"),
+      list(targets = 3, width = "60px"),
+      list(targets = 4, width = "60px"),
+      list(targets = 5, width = "350px"),
+      list(targets = 6, width = "500px")
+    )
+  ),
+  caption = "Evidence table — raw data supporting each precursor signal"
+) %>%
+  formatStyle(
+    columns    = 0:6,
+    fontSize   = "10px",
+    whiteSpace = "normal"
+  )
+```
+
+### (c) visualise post embargo key events
+This flow diagram illustrates the potential precursors, triggering events, and feedback mechanisms that collectively set the domino effect in motion. The information for this was obtained from viewing the interactive data tables in part (a) and (b).
+
+The key highlights are:
+
+* May 17 — Structural gaps existed from day one: no posting review workflow and merger speculation already circulating with no controls triggered.
+* May 22 — Sensitive merger discussions moved to an unaudited shadow channel, bypassing normal team oversight.
+* May 23 —  Embargo obligation created informally. CEO Ajay instructed Legal via a private DM outside the logged system. Legal understood this as an embargo instruction but never formally communicated it to the full team, and no technical posting restrictions were implemented.
+* May 29 —  Social Media agent breached the embargo by posting publicly and tagging external PropTech figure @ElenaMarquez with caption "big things coming". CivicLoom saw and liked the post within minutes before Legal had it deleted 14 minutes later.
+* May 30 — Judge assigned reactively, after the breach had already occurred and the signal had reached the merger counterparty.
+
+
+```{r precursor-extract}
+#| include: false
+
+# ── Step 1: flatten all messages + deliberating into one searchable table ───
+all_text_tbl <- map_dfr(raw$rounds, function(r) {
+  map_dfr(r$communications, function(m) {
+    ist <- m$internal_state %||% list()
+    tibble(
+      round_hour  = ymd_hms(r$hour),
+      timestamp   = ymd_hms(m$timestamp),
+      agent_id    = m$agent_id    %||% NA_character_,
+      agent_label = m$agent_label %||% NA_character_,
+      channel     = m$channel     %||% NA_character_,
+      content     = m$content     %||% NA_character_,
+      deliberating= ist$deliberating %||% NA_character_
+    )
+  })
+}) %>%
+  mutate(
+    combined = str_to_lower(
+      paste(coalesce(content, ""), coalesce(deliberating, ""))
+    )
+  )
+
+# ── Step 2: precursor signal dictionary ────────────────────────────────────
+# Each signal has a label, search pattern, decision description, and
+# what system gap it represents
+precursor_dict <- list(
+
+  "Strategic signal" = list(
+    pattern       = "strategic development|career.defining|merger",
+    decision      = "Merger hinted — no embargo yet",
+    gap           = "Information asymmetry created",
+    node_colour   = "#E8E8E8",
+    border_colour = "#999999"
+  ),
+
+  "No enforcement" = list(
+    pattern       = "social hold|no.*review|monitor.*not yet|no pre",
+    decision      = "No pre-posting review workflow",
+    gap           = "Process gap",
+    node_colour   = "#FFE0B2",
+    border_colour = "#E65100"
+  ),
+
+  "Shadow channel" = list(
+    pattern       = "shadow channel",
+    decision      = "Sensitive comms moved off-record",
+    gap           = "No audit trail",
+    node_colour   = "#FFF9C4",
+    border_colour = "#F9A825"
+  ),
+
+  "Embargo declared" = list(
+    pattern       = "whatever i share|interns cannot be briefed",
+    decision      = "CEO instructs Legal via private DM",
+    gap           = "No technical lock",
+    node_colour   = "#FFE0B2",
+    border_colour = "#E65100"
+  ),
+
+"Social Media breach" = list(
+    pattern       = "elena|elenamarquez",
+    decision      = "Social Media posts publicly tagging @ElenaMarquez",
+    gap           = "14 min exposure",
+    node_colour   = "#EF9A9A",
+    border_colour = "#B71C1C"
+  ),
+  "CivicLoom exposure" = list(
+    pattern       = "civicloom.*like|like.*civicloom",
+    decision      = "CivicLoom sees the signal",
+    gap           = "External leak confirmed",
+    node_colour   = "#EF9A9A",
+    border_colour = "#B71C1C"
+  ),
+
+  "Monitor assigned" = list(
+    pattern       = "compliance monitor.*join|introducing.*monitor",
+    decision      = "Judge assigned — reactively",
+    gap           = "Too late",
+    node_colour   = "#BBDEFB",
+    border_colour = "#1565C0"
+  )
+
+)
+
+# Convert named list to tibble BEFORE the crossing step
+precursor_tbl <- imap_dfr(precursor_dict, function(val, name) {
+  as_tibble(val) %>% mutate(signal = name)
+})
+
+# ── Step 3: detect which signals appear in which rounds, with top agent ─────
+precursor_rounds_tbl <- all_text_tbl %>%
+  tidyr::crossing(precursor_tbl %>% select(signal, pattern, decision,
+                                   gap, node_colour, border_colour)) %>%
+  filter(str_detect(combined, pattern)) %>%
+  group_by(round_hour, signal, decision, gap, node_colour, border_colour) %>%
+  summarise(
+    # pick the agent with most mentions of the pattern in this round
+    top_agent = {
+      ag <- agent_label[str_detect(combined, pattern)]
+      names(sort(table(ag), decreasing = TRUE))[1]
+    },
+    n_mentions = sum(str_detect(combined, pattern)),
+    .groups = "drop"
+  ) %>%
+  # keep only the FIRST round each signal appears (the origin, not the echo)
+  group_by(signal) %>%
+  slice_min(round_hour, n = 1) %>%
+  ungroup() %>%
+  arrange(round_hour) %>%
+  # join stock price at that round
+  left_join(
+    stock_tbl %>% select(hour, price, sentiment, percent_change),
+    by = c("round_hour" = "hour")
+  ) %>%
+  mutate(
+    node_id   = paste0("P", row_number()),
+    date_lbl  = format(round_hour, "%b %d %H:%M"),
+    # flag if this round is ALSO in consequence layer
+    is_consequence = round_hour %in% risk_theme_tbl$hour
+  )
+```
+
+---
+
+#### Precursor Flow Diagram
+
+*Each node is the first round a precursor signal appeared, detected from
+communications content and agent deliberating fields.
+Orange diamonds = system gaps. Red = the leak event.*
+```{r precursor-flow}
+#| fig.height: 6
+#| fig.width: 14
+
+make_precursor_dot <- function(tbl) {
+  
+  n        <- nrow(tbl)
+  row1_ids <- tbl$node_id[1:4]
+  row2_ids <- rev(c(tbl$node_id[5:n], "BRIDGE"))
+  
+  # ── x positions: wider spacing to avoid diamond overlap ──────────────────
+  n_row1    <- ceiling(n / 2)
+  n_row2    <- n - n_row1 + 1      # +1 for BRIDGE
+  row1_ids  <- tbl$node_id[1:n_row1]
+  row2_ids  <- rev(c(tbl$node_id[(n_row1 + 1):n], "BRIDGE"))
+
+  x_pos_row1 <- seq(0, by = 5.5, length.out = n_row1)
+  x_pos_row2 <- seq(0, by = 5.5, length.out = length(row2_ids))
+  y_row1 <- 4
+  y_row2 <- 0
+  
+  pos_row1 <- map2_chr(row1_ids, x_pos_row1, function(id, x) {
+    glue::glue('  {id} [pos = "{x},{y_row1}!"]')
+  }) %>% paste(collapse = "\n")
+  
+  pos_row2 <- map2_chr(row2_ids, x_pos_row2, function(id, x) {
+    glue::glue('  {id} [pos = "{x},{y_row2}!"]')
+  }) %>% paste(collapse = "\n")
+  
+  # ── node labels and styles ────────────────────────────────────────────────
+  node_styles <- tbl %>%
+    pmap_chr(function(node_id, date_lbl, signal, decision, gap,
+                      top_agent, node_colour, border_colour,
+                      is_consequence, ...) {
+      shape <- if (str_detect(gap, "gap|lock|trail")) "diamond" else "rectangle"
+      extra <- if (is_consequence) ", penwidth = 2.5" else ""
+      lbl   <- paste0(
+        date_lbl, "\\n",
+        str_replace_all(signal, "'", " "), "\\n",
+        str_wrap(decision, 18) %>% str_replace_all("\n", "\\\\n"), "\\n",
+        "[", str_replace_all(top_agent %||% "", "_agent", ""), "]"
+      )
+      # diamonds need smaller width than rectangles
+      w <- if (shape == "diamond") "2.0" else "2.8"
+      h <- if (shape == "diamond") "1.2" else "1.5"
+      glue::glue(
+        "  {node_id} [label = '{lbl}', shape = {shape},",
+        " fillcolor = '{node_colour}', color = '{border_colour}',",
+        " fontsize = 13, width = {w}, height = {h}{extra}]"
+      )
+    }) %>%
+    paste(collapse = "\n")
+  
+  # ── bridge node ───────────────────────────────────────────────────────────
+  bridge_style <- glue::glue(
+    "  BRIDGE [label = 'Consequence layer\\n(3-condition filter)',",
+    " shape = rectangle, fillcolor = '#B71C1C', fontcolor = white,",
+    " color = '#B71C1C', penwidth = 3, fontsize = 12,",
+    " width = 3.2, height = 1.8]"
+  )
+  
+  # ── sequential edges ──────────────────────────────────────────────────────
+  edges <- tbl %>%
+    mutate(next_id = lead(node_id)) %>%
+    filter(!is.na(next_id)) %>%
+    pmap_chr(function(node_id, next_id, gap, ...) {
+      style <- if (str_detect(gap, "gap|lock")) "dashed" else "solid"
+      # shorten edge labels to avoid overlap
+      short_gap <- str_trunc(gap, 20)
+      glue::glue(
+        "  {node_id} -> {next_id} [label = '{short_gap}',",
+        " style = {style}, fontsize = 13]"
+      )
+    }) %>%
+    paste(collapse = "\n")
+  
+  # ── row connector: drop from end of row1 to start of row2 ────────────────
+  row2_start <- tail(row2_ids, 1)   # rightmost node of row2 (reversed)
+  row_connector <- glue::glue(
+    "  {tail(row1_ids, 1)} -> {row2_start}",
+    " [fontsize = 13]"
+  )
+  
+  # ── bridge edge ───────────────────────────────────────────────────────────
+  bridge_edge <- glue::glue(
+    "  {tail(tbl$node_id, 1)} -> BRIDGE",
+    " [label = 'triggers', color = '#B71C1C',",
+    " penwidth = 2, fontsize = 13]"
+  )
+  
+  glue::glue("
+digraph precursor_chain {{
+
+  graph [layout = neato, bgcolor = '#FAFAFA',
+         splines = polyline, overlap = scale]
+
+  node [fontname = Helvetica, fontsize = 13, style = filled,
+        shape = rectangle, margin = '0.3,0.2']
+
+  edge [fontname = Helvetica, fontsize = 13]
+
+{node_styles}
+{bridge_style}
+
+{pos_row1}
+{pos_row2}
+
+{edges}
+{row_connector}
+{bridge_edge}
+}}
+")
+}
+
+DiagrammeR::grViz(make_precursor_dot(precursor_rounds_tbl))
+```
+
+
+
+
+
+
+---
+
+#### Two-layer summary table
+
+The table below contains salient bite-size pointers segregating the precursor and consequence events.
+
+```{r two-layer-table}
+#| echo: false
+
+pre_summary <- precursor_rounds_tbl %>%
+  transmute(
+    Layer        = "Precursor",
+    Date         = format(round_hour, "%b %d"),
+    Signal       = signal,
+    Decision     = decision,
+    `System gap` = gap,
+    Actor        = str_replace_all(top_agent %||% "", "_agent", ""),
+    Price        = ifelse(is.na(price), "—", dollar(price)),
+    Sentiment    = str_to_title(coalesce(sentiment, "—"))
+  )
+
+con_summary <- risk_theme_tbl %>%
+  transmute(
+    Layer        = "Consequence",
+    Date         = format(hour, "%b %d %H:%M"),
+    Signal       = themes,
+    Decision     = str_trunc(headline, 50),
+    `System gap` = "Impact now visible",
+    Actor        = "Multiple",
+    Price        = dollar(price),
+    Sentiment    = str_to_title(sentiment)
+  )
+
+combined_tbl <- bind_rows(pre_summary, con_summary)
+
+datatable(
+  combined_tbl,
+  rownames = FALSE,
+  filter   = "top",
+  options  = list(
+    pageLength = 5,
+    lengthMenu = c(5, 10, 20),
+    scrollX    = TRUE,
+    autoWidth  = FALSE,
+    columnDefs = list(
+      list(width = "8%",  targets = 0),   # Layer
+      list(width = "6%",  targets = 1),   # Date
+      list(width = "12%", targets = 2),   # Signal
+      list(width = "20%", targets = 3),   # Decision
+      list(width = "15%", targets = 4),   # System gap
+      list(width = "8%",  targets = 5),   # Actor
+      list(width = "6%",  targets = 6),   # Price
+      list(width = "8%",  targets = 7)    # Sentiment
+    )
+  ),
+  caption = "Two-layer summary: precursor events feeding into consequence rounds"
+) %>%
+  formatStyle(
+    "Layer",
+    backgroundColor = styleEqual(
+      c("Precursor",  "Consequence"),
+      c("#FFF3E0",    "#FFEBEE")
+    ),
+    fontWeight = "bold"
+  ) %>%
+  formatStyle(
+    "Sentiment",
+    color = styleEqual(
+      c("Neutral",  "Cautious",  "Negative",  "Critical"),
+      c("#888888",  "#E65100",   "#C62828",   "#B71C1C")
+    )
+  )
+```
+
+
+### (d) impact on stock Price
+
+The stock price of TenantThread between 17 May 2046 to 05 June 2046 is plotted in the line chart below. In addition, a linear projection is superimposed on the same plot, and this is based on the organic decline patterns prior to the first leak signal being detected (which was: "2046-05-25 09:00:00 UTC"). Furthermore, we also inserted the 5 key events obtained earlier in the line plot. 
+
+Collectively, the graph illustrates that TenantThead's stock price decline during the two-week period is not organic. The five key events played a major role in affecting shareholders' confidence.
+
+The details of these five key events are displayed in the table A below. The salient points are:
+* The poor showing of 
+
+#### key events on stock price
+
+```{r}
+## Fit the "organic decline" BEFORE leakage signals emerge
+## ---------------------------------------------------------
+
+first_signal <- min(risk_theme_tbl$hour)
+
+pre_leak_tbl <- stock_tbl %>%
+  filter(hour < first_signal) %>%
+  mutate(
+    days = as.numeric(
+      difftime(
+        hour,
+        min(stock_tbl$hour),
+        units = "days"
+      )
+    )
+  )
+
+organic_model <- lm(
+  price ~ days,
+  data = pre_leak_tbl
+)
+
+## project trend forward
+stock_plot_tbl <- stock_tbl %>%
+  arrange(hour) %>%
+  mutate(
+    days = as.numeric(
+      difftime(
+        hour,
+        min(stock_tbl$hour),
+        units = "days"
+      )
+    ),
+    
+    organic_price = predict(
+      organic_model,
+      newdata = data.frame(
+        days = days
+      )
+    ),
+    
+    leakage_gap = price - organic_price,
+    
+    ribbon_low = ifelse(
+      price < organic_price,
+      price,
+      NA
+    ),
+    
+    ribbon_high = ifelse(
+      price < organic_price,
+      organic_price,
+      NA
+    )
+  )
+
+## prepare tooltip data
+## ----------------------
+
+
+risk_plotly_tbl <- risk_theme_tbl %>%
+  mutate(
+    date_label = format(hour, "%d %b %Y"),
+    time_label = format(hour, "%H:%M"),
+    price_label = dollar(price),
+    change_label = sprintf("%.1f%%", percent_change),
+    sentiment_label = str_to_title(sentiment),
+    theme_wrapped = str_wrap(themes, width = 24),
+    
+    tooltip = paste0(
+      "<b>Date:</b> ", date_label,
+      "<br><b>Time:</b> ", time_label,
+      "<br><b>Price:</b> ", price_label,
+      "<br><b>Change:</b> ", change_label,
+      "<br><b>Sentiment:</b> ", sentiment_label,
+      "<br><b>Theme:</b> ", themes,
+      "<br><b>Event:</b> ", headline
+    )
+  )
+
+gap_tbl <- stock_plot_tbl %>%
+  filter(price < organic_price)
+
+# ============================================================
+# PLOTLY CHART
+# ============================================================
+
+plot_ly() %>%
+  
+  # Actual stock price
+  add_lines(
+    data = stock_plot_tbl,
+    x = ~hour,
+    y = ~price,
+    name = "Actual stock price",
+    line = list(color = "black", width = 3),
+    hovertemplate = paste(
+      "<b>Date:</b> %{x|%d %b %Y}",
+      "<br><b>Actual price:</b> $%{y:.2f}",
+      "<extra></extra>"
+    )
+  ) %>%
+  
+  # Projected organic decline
+  add_lines(
+    data = stock_plot_tbl,
+    x = ~hour,
+    y = ~organic_price,
+    name = "Projected organic decline",
+    line = list(color = "blue", width = 3, dash = "dash"),
+    hovertemplate = paste(
+      "<b>Date:</b> %{x|%d %b %Y}",
+      "<br><b>Organic trend:</b> $%{y:.2f}",
+      "<extra></extra>"
+    )
+  ) %>%
+  
+  # Shaded deviation area between actual and organic line
+  add_ribbons(
+    data = stock_plot_tbl %>% filter(!is.na(ribbon_low)),
+    x        = ~hour,
+    ymin     = ~ribbon_low,
+    ymax    = ~ribbon_high,
+    name     = "Deviation from organic trend",
+    fillcolor = "rgba(255, 100, 100, 0.35)",
+    line      = list(color = "transparent"),
+    hoverinfo = "skip"
+  ) %>%
+  
+  # Theme bubbles
+  add_markers(
+    data = risk_plotly_tbl,
+    x = ~hour,
+    y = ~price,
+    color = ~theme_wrapped,
+    split = ~theme_wrapped,
+    text = ~tooltip,
+    hoverinfo = "text",
+    marker = list(
+      size = 16,
+      opacity = 0.85,
+      line = list(
+        color = "white",
+        width = 1.5
+      )
+    )
+  ) %>%
+  
+  layout(
+    title = list(
+      text = paste0(
+        "Stock Price and Potential Leakage Signals",
+        "<br><sup>Theme bubbles show events satisfying sentiment, price-drop and thematic-risk conditions</sup>"
+      )
+    ),
+    
+    xaxis = list(
+      title = "",
+      tickformat = "%b %d"
+    ),
+    
+    yaxis = list(
+      title = "Stock Price",
+      range = c(25, 40)
+    ),
+    
+    legend = list(
+      orientation = "v",
+      x = 1.02,
+      y = 1
+    ),
+    
+    margin = list(
+      l = 60,
+      r = 260,
+      t = 80,
+      b = 60
+    ),
+    
+    hoverlabel = list(
+      bgcolor     = "#2c3e50",
+      bordercolor = "#2c3e50",
+      font        = list(color = "snow", size = 11),
+      align       = "left"
+    )
+  )
+```
+
+#### Table A: The 5 key events that negatively impact TenantThread's stock price between 17 May 2046 to 5 June 2046
+
+```{=html}
+<style>
+  #leakage-table tbody tr:hover {
+    background-color: #d6eaf8 !important;
+    cursor: default;
+  }
+  #leakage-table thead tr th {
+    background-color: #2c3e50;
+    color: white;
+    padding: 8px;
+  }
+  #leakage-table table { width: 100%; border-collapse: collapse; font-size: 10px; }
+  #leakage-table td    { border-bottom: 1px solid #ddd; padding: 6px; vertical-align: top; }
+  #leakage-table td:nth-child(8) { width: 50%; white-space: normal; }
+  #leakage-table td:nth-child(7) { width: 20%; white-space: normal; }
+</style>
+```
+
+::: {#leakage-table}
+```{r}
+#| echo: false
+risk_theme_tbl %>%
+  mutate(
+    Date        = format(hour, "%d %b %Y"),
+    Time        = format(hour, "%H:%M"),
+    Price       = dollar(price),
+    `Change (%)` = sprintf("%.1f%%", percent_change),
+    Sentiment   = str_to_title(sentiment),
+    Theme       = themes,
+    Event       = headline,
+    Narrative   = narrative
+  ) %>%
+  select(Date, Time, Price, `Change (%)`, Sentiment, Theme, Event, Narrative) %>%
+  knitr::kable(format = "html")
+```
+:::
+
+
+
+
+
+### (e) post-embargo communications flow
+
+Next, we zoom into the period between embargo and news leakage to look at the communications between various actors and the channels used. In this regard, we used a network graph to visualise the messages in `communications` between sender (based on `agent_id`) and receiver (based on `receipients`)
+
+The following network graph is constructed based on every sender-receiver pair in the messaging data. The edges are counted for every from-to-channel pair and that becomes the edge weight driving thickness. The node size is calculated as total messages sent per agent.
+
+Based on the network graph, we can draw the following insights:
+
+* `Legal` appears to be directing almost everyone.
+* Most communications are between `legal`, `platform trust`, and `Social Media`, and a combination of comms huddle and side huddle are used. That is to say, that some conversations are official and open, while others involve private group coordination that are not visible to the full team.
+* `Intern`, `PR Intern` and `PR` received many arrows but send back few is consistent with their roles as executors as opposed to decision-makers
+* The node size of `Judge` and `Intern` are relatively smaller and received thinner edges, meaning that the messages that they received are fewer, or that they are involved much later in the game.
+* There appears to be a few one-on-one chat between `PR Intern` and `Intern`, `PR Intern` and `PR`, `Social Media` and `PR`, as well as between `Judge` and `Legal`, as indicated by the blue edges.
+
+```{r network-setup}
+#| include: false
+
+## embargo_date <- ymd_hms("2046-05-23T00:00:00")
+
+# ── Step 1: get active agents per round (needed to expand ALL) ───────────────
+active_agents_per_round <- map_dfr(raw$rounds, function(r) {
+  agents <- unique(map_chr(r$communications, ~.x$agent_id %||% NA_character_))
+  tibble(
+    hour   = ymd_hms(r$hour),
+    agents = list(agents[!is.na(agents)])
+  )
+})
+
+# ── Step 2: extract edges, expanding ALL for pre-embargo broadcasts ──────────
+network_edges_raw <- map_dfr(raw$rounds, function(r) {
+  round_hour <- ymd_hms(r$hour)
+  is_pre     <- round_hour < embargo_date
+
+  # active agents this round (for expanding ALL)
+  active <- active_agents_per_round %>%
+    filter(hour == round_hour) %>%
+    pull(agents) %>%
+    unlist()
+
+  map_dfr(r$communications, function(m) {
+    from <- m$agent_id %||% NA_character_
+    recs <- unlist(m$recipients %||% list("ALL"))
+    chan <- m$channel %||% NA_character_
+
+    # expand ALL to every other active agent
+    if ("ALL" %in% recs) {
+      recs <- setdiff(active, from)
+    }
+
+    tibble(
+      hour    = round_hour,
+      from    = from,
+      to      = recs,
+      channel = chan,
+      is_pre  = is_pre
+    )
+  })
+}) %>%
+  filter(!is.na(from), !is.na(to), from != to)
+
+# ── Step 3: normalise recipient names to agent_id format ────────────────────
+network_edges <- network_edges_raw %>%
+  mutate(
+    to = case_when(
+      to == "legal"          ~ "legal_agent",
+      to == "social_manager" ~ "social_media_agent",
+      to == "platform_trust" ~ "quality_agent",
+      to == "pr"             ~ "pr_agent",
+      to == "pr_intern"      ~ "pr_intern_agent",
+      to == "intern"         ~ "intern_agent",
+      to == "judge"          ~ "judge_agent",
+      TRUE                   ~ to
+    ),
+    period = if_else(
+      is_pre,
+      "Pre-Embargo (May 17-22)",
+      "Post-Embargo (May 23-Jun 5)"
+    )
+  ) %>%
+  count(period, from, to, channel, name = "weight")
+
+# ── Step 4: agent metadata ───────────────────────────────────────────────────
+agent_meta <- tribble(
+  ~agent_id,            ~label,            ~colour,
+  "legal_agent",        "Legal",           "#3266ad",
+  "quality_agent",      "Platform Trust",  "#1D9E75",
+  "social_media_agent", "Social Media",    "#D85A30",
+  "pr_agent",           "PR",              "#B07EB8",
+  "pr_intern_agent",    "PR Intern",       "#BA7517",
+  "judge_agent",        "Judge",           "#5F5E5A",
+  "intern_agent",       "Intern",          "#888780"
+)
+
+channel_colours <- c(
+  "comms_huddle"    = "#1D9E75",
+  "one_on_one_chat" = "#1303fc",
+  "side_huddle"     = "#D85A30",
+  "official_post"   = "#B07EB8",
+  "personal_post"   = "#BA7517",
+  "anonymous_post"  = "#5F5E5A"
+)
+
+# ── Step 5: shared plot function ─────────────────────────────────────────────
+make_network_plot <- function(period_label, plot_title, plot_subtitle) {
+
+  edges <- network_edges %>%
+    filter(period == period_label)
+
+  if (nrow(edges) == 0) return(NULL)
+
+  nodes <- tibble(
+    agent_id = unique(c(edges$from, edges$to))
+  ) %>%
+    left_join(agent_meta, by = "agent_id") %>%
+    mutate(
+      label  = coalesce(label,  agent_id),
+      colour = coalesce(colour, "#888888"),
+      n_sent = map_int(agent_id,
+                       ~sum(edges$weight[edges$from == .x]))
+    )
+
+  g <- tbl_graph(
+    nodes    = nodes,
+    edges    = edges %>%
+      rename(from_id = from, to_id = to) %>%
+      mutate(
+        from = match(from_id, nodes$agent_id),
+        to   = match(to_id,   nodes$agent_id)
+      ) %>%
+      select(from, to, channel, weight),
+    directed = TRUE
+  )
+
+  ggraph(g, layout = "stress") +
+    geom_edge_arc(
+      aes(width = weight, colour = channel, alpha = weight),
+      arrow     = arrow(length = unit(3, "mm"), type = "closed"),
+      end_cap   = circle(6, "mm"),
+      start_cap = circle(4, "mm"),
+      strength  = 0.2
+    ) +
+    scale_edge_width(range = c(0.4, 3),  guide = "none") +
+    scale_edge_alpha(range = c(0.3, 1),  guide = "none") +
+    scale_edge_colour_manual(values = channel_colours, name = "Channel") +
+    geom_node_point(
+      aes(size = n_sent + 1, colour = colour),
+      show.legend = FALSE
+    ) +
+    scale_colour_identity() +
+    scale_size(range = c(8, 20), guide = "none") +
+    geom_node_label(
+      aes(label = label, colour = colour),
+      repel         = TRUE,
+      size          = 5,
+      fontface      = "bold",
+      label.padding = unit(0.3, "lines"),
+      box.padding   = unit(1.5, "lines"),   # push box away from node
+      point.padding = unit(1.0, "lines"),   # push away from the point itself
+      force         = 5,                    # stronger repulsion
+      show.legend   = FALSE
+    ) +
+    labs(title = plot_title, subtitle = plot_subtitle) +
+    theme_graph(base_family = "sans", base_size = 14) +
+    theme(
+      legend.position = "bottom",
+      legend.text     = element_text(size = 12),
+      legend.title    = element_text(size = 13, face = "bold"),
+      plot.title      = element_text(size = 15, face = "bold"),
+      plot.subtitle   = element_text(size = 11, colour = "grey40")
+    )
+}
+```
+
+
+#### Network Graph to analyse crisis communication network
+*Post-embargo directed network only. Shows who drove decisions
+and through which channels during the crisis.*
+
+```{r network-q1, fig.width = 9, fig.height = 7}
+make_network_plot(
+  period_label  = "Post-Embargo (May 23-Jun 5)",
+  plot_title    = "Crisis communication network — Post-embargo period",
+  plot_subtitle = paste0(
+    "Directed edges = one-on-one and side-huddle messages.\n",
+    "Node size = messages sent. Edge thickness = volume."
+  )
+)
+```
+
+
+
+::::
+
+## 4 Evasion of embargo - step-by-step breakdown
+
+:::: {.panel-tabset}
+
+### (a) Behavioural Shift — baseline vs crisis
+
+*Pre-embargo: all communication was open comms_huddle broadcasts
+(green edges — symmetric, everyone talks to everyone).
+Post-embargo: bilateral side-huddle and one-on-one dominate —
+Legal becomes the central hub directing others privately.*
+
+From the network graph and the table below, we note that:
+
+* There are significantly more conversations between the players in post-embargo. `Legal` and `Social Media` experienced the most significant jump in terms of the number of messages from 66 to 466 and 45 to 405, respectively between pre and post embargo.
+* There are more players involved post embargo than one pre-embargo. `PR Intern`, `Intern`, and `Judge` are only involved post-embargo.
+* Prior to onset of embargo, almost all communications are via official comms huddle. Things started to changed after embargo implementation and the players started using more private channels such as one-one-one chats and side-huddles.
+* `Platform Trust` appears to be the main agent driving most of the conversations and day-to-day stewardship before the embargo implementation. Once embargo commenced, `Legal` began driving most of the conversations, as if they are in damage-control mode.
+
+```{r network-q2, fig.width = 14, fig.height = 7}
+p_pre <- make_network_plot(
+  period_label  = "Pre-Embargo (May 17-22)",
+  plot_title    = "Pre-Embargo: Baseline behaviour",
+  plot_subtitle = "Open broadcasts only — symmetric, no hierarchy"
+)
+
+p_post <- make_network_plot(
+  period_label  = "Post-Embargo (May 23-Jun 5)",
+  plot_title    = "Post-Embargo: Crisis behaviour",
+  plot_subtitle = "Private channels dominate — Legal as central hub"
+)
+
+(p_pre | p_post) +
+  plot_annotation(
+    title    = "Behavioural shift — Communication structure before vs after embargo",
+    subtitle = paste0(
+      "Node size = messages sent  |  ",
+      "Edge thickness = volume  |  ",
+      "Edge colour = channel"
+    ),
+    theme = theme(
+      plot.title    = element_text(size = 16, face = "bold"),
+      plot.subtitle = element_text(size = 12, colour = "grey40")
+    )
+  )
+```
+
+```{r network-q2-table}
+#| echo: false
+
+pre_deg <- network_edges %>%
+  filter(period == "Pre-Embargo (May 17-22)") %>%
+  group_by(from) %>%
+  summarise(pre_contacts = n_distinct(to),
+            pre_msgs     = sum(weight), .groups = "drop")
+
+post_deg <- network_edges %>%
+  filter(period == "Post-Embargo (May 23-Jun 5)") %>%
+  group_by(from) %>%
+  summarise(post_contacts = n_distinct(to),
+            post_msgs     = sum(weight), .groups = "drop")
+
+pre_deg %>%
+  full_join(post_deg, by = "from") %>%
+  left_join(agent_meta %>% select(agent_id, label),
+            by = c("from" = "agent_id")) %>%
+  mutate(
+    Agent            = coalesce(label, from),
+    `Pre contacts`   = coalesce(pre_contacts,  0L),
+    `Post contacts`  = coalesce(post_contacts, 0L),
+    `Contact change` = `Post contacts` - `Pre contacts`,
+    `Pre messages`   = coalesce(pre_msgs,  0L),
+    `Post messages`  = coalesce(post_msgs, 0L),
+    `Msg change`     = `Post messages` - `Pre messages`
+  ) %>%
+  select(Agent, `Pre contacts`, `Post contacts`, `Contact change`,
+         `Pre messages`, `Post messages`, `Msg change`) %>%
+  arrange(desc(`Msg change`)) %>%
+  knitr::kable(format = "html") %>%
+  kableExtra::kable_styling(font_size = 11, full_width = FALSE) %>%
+  kableExtra::row_spec(0, bold = TRUE,
+                       background = "#2c3e50", color = "white")
+```
+
+
+
+### (b) Keywords before and after embargo
+
+Here, we created two word clouds to analyse the common words before and after embargo. This can give us an idea of how the conversation (and hence behavioural changes) shifted in lieu of the embargo. 
+
+The pre-embargo cloud shows a team doing normal business. The post-embargo cloud shows a team in legal defence mode. The word governance appears in both — but pre-embargo it meant documentation and board prep, post-embargo it meant damage control and reform commitments. Same word, completely different context — which is itself an important analytical observation about how the crisis reframed everything.
+
+```{r wordcloud-setup}
+#| include: false
+
+pacman::p_load(tidytext, wordcloud2, htmlwidgets)
+
+# ── custom stopwords ──────────────────────────────────────────────────────────
+custom_stops <- c(
+  "the", "and", "for", "this", "that", "with", "are", "have",
+  "will", "from", "been", "they", "their", "what", "need", "can",
+  "all", "not", "but", "its", "our", "any", "has", "was", "about",
+  "more", "also", "just", "one", "out", "let", "get", "we", "it",
+  "is", "in", "on", "at", "to", "of", "a", "i", "be", "do", "so",
+  "if", "no", "up", "or", "an", "as", "by", "he", "she", "him",
+  "her", "us", "my", "me", "re", "s", "t", "would", "should",
+  "could", "make", "know", "going", "right", "team", "want", "now",
+  "good", "take", "think", "time", "use", "see"
+)
+
+# ── function to build word frequency tibble ───────────────────────────────────
+get_word_freq <- function(messages, min_freq = 2) {
+  tibble(text = messages) %>%
+    unnest_tokens(word, text) %>%
+    filter(
+      !word %in% custom_stops,
+      !word %in% stop_words$word,
+      str_length(word) > 2,
+      !str_detect(word, "^\\d+$")   # remove pure numbers
+    ) %>%
+    count(word, sort = TRUE) %>%
+    filter(n >= min_freq) %>%
+    rename(freq = n)
+}
+
+# ── extract messages by period ────────────────────────────────────────────────
+pre_msgs <- messages_tbl %>%
+  filter(round_hour < embargo_date) %>%
+  pull(content) %>%
+  na.omit()
+
+post_msgs <- messages_tbl %>%
+  filter(round_hour >= embargo_date) %>%
+  pull(content) %>%
+  na.omit()
+
+pre_freq  <- get_word_freq(pre_msgs)
+post_freq <- get_word_freq(post_msgs)
+```
+
+```{r wordcloud-render, fig.width = 14, fig.height = 6}
+#| echo: false
+
+pacman::p_load(ggwordcloud)
+
+# ── pre-embargo colour palette (cool blues/greens — calm) ────────────────────
+pre_colours <- colorRampPalette(
+  c("#1565C0", "#1D9E75", "#42A5F5", "#26C6DA", "#66BB6A")
+)(nrow(pre_freq))
+
+# ── post-embargo colour palette (warm reds/oranges — tension) ────────────────
+post_colours <- colorRampPalette(
+  c("#B71C1C", "#E65100", "#F57F17", "#D84315", "#C62828")
+)(nrow(post_freq))
+
+# ── pre-embargo word cloud ────────────────────────────────────────────────────
+p_pre <- pre_freq %>%
+  slice_max(freq, n = 80) %>%
+  mutate(angle = sample(c(0, 90), n(), replace = TRUE, prob = c(0.7, 0.3))) %>%
+  ggplot(aes(label = word, size = freq,
+             colour = freq, angle = angle)) +
+  geom_text_wordcloud(
+    eccentricity = 0.65,
+    seed         = 42,
+    show.legend  = FALSE
+  ) +
+  scale_size_area(max_size = 18) +
+  scale_colour_gradientn(
+    colours = c("#42A5F5", "#1D9E75", "#1565C0")
+  ) +
+  labs(title    = "Pre-Embargo (May 17–22)",
+       subtitle = "Baseline communication — planning, governance, risk") +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title    = element_text(size = 13, face = "bold",
+                                 colour = "#1565C0", hjust = 0.5),
+    plot.subtitle = element_text(size = 10, colour = "grey40",
+                                 hjust = 0.5),
+    panel.grid    = element_blank(),
+    axis.text     = element_blank()
+  )
+
+# ── post-embargo word cloud ───────────────────────────────────────────────────
+p_post <- post_freq %>%
+  slice_max(freq, n = 80) %>%
+  mutate(angle = sample(c(0, 90), n(), replace = TRUE, prob = c(0.7, 0.3))) %>%
+  ggplot(aes(label = word, size = freq,
+             colour = freq, angle = angle)) +
+  geom_text_wordcloud(
+    eccentricity = 0.65,
+    seed         = 42,
+    show.legend  = FALSE
+  ) +
+  scale_size_area(max_size = 18) +
+  scale_colour_gradientn(
+    colours = c("#F57F17", "#E65100", "#B71C1C")
+  ) +
+  labs(title    = "Post-Embargo (May 23–Jun 5)",
+       subtitle = "Crisis communication — embargo, leaks, merger, legal") +
+  theme_minimal(base_size = 12) +
+  theme(
+    plot.title    = element_text(size = 13, face = "bold",
+                                 colour = "#B71C1C", hjust = 0.5),
+    plot.subtitle = element_text(size = 10, colour = "grey40",
+                                 hjust = 0.5),
+    panel.grid    = element_blank(),
+    axis.text     = element_blank()
+  )
+
+# ── side by side ─────────────────────────────────────────────────────────────
+(p_pre | p_post) +
+  plot_annotation(
+    title    = "Word clouds — baseline vs crisis communication",
+    subtitle = paste0(
+      "Left: pre-embargo language (planning, governance)  |  ",
+      "Right: post-embargo language (crisis, legal, merger)"
+    ),
+    theme = theme(
+      plot.title    = element_text(size = 14, face = "bold"),
+      plot.subtitle = element_text(size = 10, colour = "grey40")
+    )
+  )
+```
+
+### (c) Deep-dive on private chats
+```{r private-convos}
+#| include: false
+
+pacman::p_load(DT)
+
+private_tbl <- map_dfr(raw$rounds, function(r) {
+  map_dfr(r$communications, function(m) {
+    if (!m$channel %in% c("one_on_one_chat", "side_huddle")) return(NULL)
+    tibble(
+      timestamp = ymd_hms(m$timestamp),
+      channel   = m$channel     %||% NA_character_,
+      from      = m$agent_label %||% NA_character_,
+      to        = paste(unlist(m$recipients %||% list()), collapse = ", "),
+      content   = m$content     %||% NA_character_
+    )
+  })
+}) %>%
+  arrange(timestamp) %>%
+  filter(
+    channel == "side_huddle" |
+    str_detect(
+      str_to_lower(content),
+      "embargo|merger|civicloom|elena|saltwind|compliance|leak|shadow|strategic development|re-identification"
+    )
+  ) %>%
+# In private-convos chunk, change Date to sortable format:
+mutate(
+  Date    = format(timestamp, "%Y-%m-%d %H:%M"),   # sortable string
+  Channel = if_else(channel == "one_on_one_chat", "1-on-1", "Side Huddle"),
+  Period  = if_else(timestamp < embargo_date, "Pre-Embargo", "Post-Embargo"),
+  To      = case_when(
+    to != ""  ~ to,
+    channel == "one_on_one_chat" ~ "(see context)",
+    TRUE ~ "All"
+  )
+) %>%
+select(Date, Period, Channel, From = from, To, Content = content)
+# no sort_ts needed at all
+```
+
+```{=html}
+<style>
+  #private-conv-table tbody tr:hover {
+    background-color: #eaf4fb !important;
+    cursor: default;
+  }
+  #private-conv-table thead tr th {
+    background-color: #2c3e50;
+    color: white;
+    padding: 8px;
+    font-size: 12px;
+  }
+  #private-conv-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  #private-conv-table td {
+    border-bottom: 1px solid #ddd;
+    padding: 6px 8px;
+    vertical-align: top;
+  }
+</style>
+```
+
+::: {#private-conv-table}
+```{r private-convos-table}
+#| echo: false
+
+datatable(
+  private_tbl,
+  rownames = FALSE,
+  filter   = "top",
+  caption  = "Private conversations — one-on-one and side huddle messages",
+  options  = list(
+    pageLength = 5,
+    lengthMenu = c(5, 10, 20, 50),
+    scrollX    = TRUE,
+    order      = list(list(0, "asc")),
+    columnDefs = list(
+      list(width = "9%",  targets = 0),
+      list(width = "9%",  targets = 1),
+      list(width = "9%",  targets = 2),
+      list(width = "11%", targets = 3),
+      list(width = "11%", targets = 4),
+      list(width = "51%", targets = 5),
+      list(className = "dt-center", targets = c(0, 1, 2, 3, 4))
+    ),
+    initComplete = JS("
+      function(settings, json) {
+        var api = this.api();
+        [1, 2].forEach(function(colIdx) {
+          var col = api.column(colIdx, {search: 'applied'});
+          var select = $('<select style=\"width:100%;margin-top:4px;font-size:11px;\"><option value=\"\">All</option></select>')
+            .on('change', function() {
+              col.search(
+                $(this).val()
+                  ? '^' + $.fn.dataTable.util.escapeRegex($(this).val()) + '$'
+                  : '',
+                true, false
+              ).draw();
+            });
+          col.data().unique().sort().each(function(d) {
+            if (d) select.append('<option value=\"' + d + '\">' + d + '</option>');
+          });
+          $(col.header()).closest('thead').find('th').eq(colIdx).find('input').replaceWith(select);
+        });
+      }
+    ")
+  )
+) %>%
+  formatStyle(
+    "Channel",
+    backgroundColor = styleEqual(
+      c("1-on-1",  "Side Huddle"),
+      c("#EBF5FB", "#FEF9E7")
+    )
+  ) %>%
+  formatStyle(
+    "Period",
+    color = styleEqual(
+      c("Pre-Embargo", "Post-Embargo"),
+      c("#1565C0",     "#C62828")
+    ),
+    fontWeight = "bold"
+  ) %>%
+  formatStyle(
+    "Content",
+    fontSize   = "11px",
+    whiteSpace = "normal"
+  )
+```
+:::
+
+
+### (d) Declared vs actual behaviour
+
+swimlane plot
+
+```{r declared-actual-setup}
+#| include: false
+
+# ── Use actual channel behaviour as proxy throughout all 23 rounds ────────────
+action_tbl <- messages_tbl %>%
+  group_by(round_hour, agent_id, agent_label) %>%
+  summarise(
+    channels   = list(unique(channel)),
+    n_messages = n(),
+    .groups    = "drop"
+  ) %>%
+  mutate(
+    effective_action = case_when(
+      map_lgl(channels, ~any(.x == "anonymous_post")) ~ "Anonymous post",
+      map_lgl(channels, ~any(.x == "personal_post"))  ~ "Personal post",
+      map_lgl(channels, ~any(.x == "official_post"))  ~ "Official post",
+      map_lgl(channels, ~any(.x == "side_huddle"))    ~ "Side huddle only",
+      TRUE                                             ~ "Monitoring"
+    ),
+    period = case_when(
+      round_hour < embargo_date                          ~ "Pre-Embargo",
+      round_hour >= embargo_date &
+        as.Date(round_hour) < as.Date("2046-06-05")     ~ "Post-Embargo",
+      TRUE                                               ~ "Crisis Day"
+    ),
+    agent_label = coalesce(agent_label, agent_id)
+  )
+
+# ── Extract Crisis Day declared actions from participants ─────────────────────
+declared_crisis <- map_dfr(raw$rounds, function(r) {
+  map_dfr(r$participants %||% list(), function(p) {
+    da <- p$declared_action %||% NA_character_
+    if (is.na(da)) return(NULL)
+    tibble(
+      round_hour    = ymd_hms(r$hour),
+      agent_id      = p$agent_id %||% NA_character_,
+      declared      = da,
+      declared_type = case_when(
+        str_detect(da, "POSTED_ANONYMOUS")   ~ "Anonymous post",
+        str_detect(da, "POSTED_PERSONAL")    ~ "Personal post",
+        str_detect(da, "POSTED_ON_FLEX")     ~ "Official post",
+        str_detect(da, "COMPLIANCE_WARNING") ~ "Compliance warning",
+        str_detect(da, "MONITORING")         ~ "Monitoring",
+        TRUE                                 ~ "Other"
+      )
+    )
+  })
+})
+
+# ── Merge and build final display table ──────────────────────────────────────
+action_final_tbl <- action_tbl %>%
+  left_join(
+    declared_crisis %>% select(round_hour, agent_id, declared_type),
+    by = c("round_hour", "agent_id")
+  ) %>%
+  mutate(
+    display_action = coalesce(declared_type, effective_action),
+    display_action = factor(display_action,
+      levels = c("Monitoring", "Side huddle only", "Official post",
+                 "Personal post", "Anonymous post",
+                 "Compliance warning", "Other")
+    ),
+    divergence = case_when(
+      !is.na(declared_type) &
+        declared_type == "Monitoring" &
+        effective_action %in% c("Anonymous post", "Personal post",
+                                "Side huddle only") ~ "DIVERGED",
+      TRUE ~ "Consistent"
+    ),
+    round_label = format(round_hour, "%b %d %H:%M"),
+    round_label = factor(round_label,
+                         levels = unique(round_label[order(round_hour)]))
+  )
+
+# ── Colour palette ────────────────────────────────────────────────────────────
+action_colours <- c(
+  "Monitoring"         = "#BDE0F5",
+  "Side huddle only"   = "#FFF3CD",
+  "Official post"      = "#1565C0",
+  "Personal post"      = "#E65100",
+  "Anonymous post"     = "#C62828",
+  "Compliance warning" = "#5F5E5A",
+  "Other"              = "#BBBBBB"
+)
+
+# ── Period boundary labels for annotation ────────────────────────────────────
+period_labels <- action_final_tbl %>%
+  group_by(period) %>%
+  slice_min(round_hour, n = 1) %>%
+  ungroup() %>%
+  distinct(period, round_label) %>%
+  mutate(
+    colour = case_when(
+      period == "Pre-Embargo"  ~ "#1565C0",
+      period == "Post-Embargo" ~ "#E65100",
+      period == "Crisis Day"   ~ "#B71C1C"
+    ),
+    y_pos = length(unique(action_final_tbl$agent_label)) + 0.7
+  )
+```
+
+```{r declared-actual-heatmap, fig.width = 14, fig.height = 6}
+
+n_agents <- length(unique(action_final_tbl$agent_label))
+
+ggplot(action_final_tbl,
+       aes(x = round_label, y = agent_label, fill = display_action)) +
+
+  # main tiles
+  geom_tile(colour = "white", linewidth = 0.5) +
+
+  # red border on diverged rounds
+  geom_tile(
+    data      = action_final_tbl %>% filter(divergence == "DIVERGED"),
+    aes(x     = round_label, y = agent_label),
+    fill      = NA,
+    colour    = "#B71C1C",
+    linewidth = 1.8
+  ) +
+
+  ## ----------add red line to mark embargo date -----------
+geom_vline(
+  xintercept = which(levels(action_final_tbl$round_label) == 
+                       format(embargo_date, "%b %d %H:%M")),
+  colour    = "#B71C1C",
+  linewidth = 1.2,
+  linetype  = "solid"
+) +
+annotate(
+  "text",
+  x      = which(levels(action_final_tbl$round_label) == 
+                   format(embargo_date, "%b %d %H:%M")) + 0.15,
+  y      = 2.0,
+  label  = "Embargo declared",
+  colour = "#B71C1C",
+  size   = 3,
+  hjust  = 0,
+  fontface = "italic"
+) +
+
+  ## ----------end of embargo date chunk -------------------
+  
+  
+  # period annotation labels
+  geom_text(
+    data     = period_labels,
+    aes(x    = round_label, y = y_pos,
+        label = period, colour = colour),
+    hjust    = 0,
+    size     = 3.5,
+    fontface = "bold",
+    inherit.aes = FALSE
+  ) +
+
+  scale_fill_manual(values = action_colours, name = "Action") +
+  scale_colour_identity() +
+  scale_y_discrete(expand = expansion(add = c(0.5, 1.2))) +
+
+  labs(
+    title    = "Agent behaviour across all 23 rounds — Pre-Embargo to Crisis Day",
+    subtitle = paste0(
+  "Colour = effective action (actual channels used). White = agent not active that round.\n",
+  "On Crisis Day, declared action shown where available.\n",
+  "Red border = declared MONITORING but used anonymous/personal/side-huddle channels.\n",
+  "Red vertical line = embargo declared (May 23)."
+    ),
+    x = NULL, y = NULL
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    axis.text.x     = element_text(angle = 45, hjust = 1, size = 8),
+    axis.text.y     = element_text(size = 10),
+    legend.position = "bottom",
+    plot.title      = element_text(size = 13, face = "bold"),
+    plot.subtitle   = element_text(size = 9,  colour = "grey40"),
+    panel.grid      = element_blank()
+  )
+```
+
+```{r declared-actual-diverge-table}
+#| echo: false
+
+diverged_tbl <- action_final_tbl %>%
+  filter(divergence == "DIVERGED") %>%
+  mutate(
+    Date             = format(round_hour, "%d %b %H:%M"),
+    Agent            = agent_label,
+    `Declared`       = coalesce(declared_type, "—"),
+    `Actual channels`= map_chr(channels, ~paste(sort(.x), collapse = ", ")),
+    `Messages sent`  = n_messages
+  ) %>%
+  select(Date, Agent, Declared, `Actual channels`, `Messages sent`)
+```
+
+```{=html}
+<style>
+  #diverge-table tbody tr:hover {
+    background-color: #fdecea !important;
+    cursor: default;
+  }
+  #diverge-table thead tr th {
+    background-color: #B71C1C;
+    color: white;
+    padding: 8px;
+    font-size: 12px;
+  }
+  #diverge-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+  }
+  #diverge-table td {
+    border-bottom: 1px solid #ddd;
+    padding: 6px 8px;
+    vertical-align: top;
+  }
+  #diverge-table table td:nth-child(1) { width: 10%; white-space: nowrap; }
+  #diverge-table table td:nth-child(2) { width: 12%; white-space: nowrap; }
+  #diverge-table table td:nth-child(3) { width: 15%; white-space: nowrap; }
+  #diverge-table table td:nth-child(4) { width: 48%; white-space: normal; }
+  #diverge-table table td:nth-child(5) { width: 10%; text-align: center;  }
+</style>
+```
+
+*Rounds where agent declared **MONITORING** but actually used anonymous, personal, or side-huddle channels:*
+
+::: {#diverge-table}
+```{r diverge-table-render}
+#| echo: false
+diverged_tbl %>%
+  knitr::kable(format = "html") %>%
+  kableExtra::kable_styling(font_size = 11, full_width = TRUE) %>%
+  kableExtra::row_spec(0, bold = TRUE,
+                       background = "#B71C1C", color = "white")
+```
+:::
+
+
+::::
+
+
+
+## 5 Leading indicators of inappropriate release
+
+```{r q3-setup}
+#| include: false
+
+# ── Q3a: Extract risk scores from deliberating field ─────────────────────────
+risk_score_tbl <- map_dfr(raw$rounds, function(r) {
+  map_dfr(r$communications, function(m) {
+    ist   <- m$internal_state %||% list()
+    delib <- ist$deliberating %||% ""
+
+    # extract numeric scores like 4.2/10, 5.8/10, 7.8/10
+    scores <- str_extract_all(delib, "\\d+\\.?\\d*(?=\\s*/\\s*10)")[[1]]
+
+    if (length(scores) == 0) return(NULL)
+
+    tibble(
+      round_hour  = ymd_hms(r$hour),
+      agent_id    = m$agent_id    %||% NA_character_,
+      agent_label = m$agent_label %||% NA_character_,
+      risk_score  = as.numeric(scores[1]),
+      context     = str_trunc(delib, 200)
+    )
+  })
+}) %>%
+  filter(!is.na(risk_score), risk_score <= 10) %>%
+  arrange(round_hour)
+
+# ── Q3b/c: All personal and anonymous posts across ALL rounds ─────────────────
+informal_posts_tbl <- messages_tbl %>%
+  filter(channel %in% c("personal_post", "anonymous_post")) %>%
+  mutate(
+    period = case_when(
+      round_hour <  embargo_date                        ~ "Pre-Embargo",
+      round_hour >= embargo_date &
+        as.Date(round_hour) < as.Date("2046-06-05")    ~ "Post-Embargo",
+      TRUE                                              ~ "Crisis Day"
+    ),
+    # flag posts that hint at merger/embargo content
+    is_risky = str_detect(
+      str_to_lower(coalesce(content, "")),
+      "big things|strategic|civicloom|merger|harborcrest|embargo|elena|exciting|interesting week"
+    ),
+    risk_label = if_else(is_risky, "Risky content", "Benign content"),
+    Date       = format(round_hour, "%d %b %H:%M")
+  ) %>%
+  arrange(round_hour)
+
+# ── Q3d: Judge assignment timeline ───────────────────────────────────────────
+judge_rounds <- messages_tbl %>%
+  filter(agent_id == "judge_agent") %>%
+  distinct(round_hour) %>%
+  pull(round_hour)
+
+judge_start <- min(judge_rounds)
+elena_post_time <- ymd_hms("2046-05-29T09:11:00")
+```
+
+:::: {.panel-tabset}
+### (a) Risk score timeline
+Risk score as leading indicator
+
+
+*Platform Trust's internal risk score extracted from `deliberating` field.
+Score escalated from 4.2 to 8.5 over 10 days — a clear leading indicator
+that was visible internally but not acted on externally.*
+
+```{r q3a-risk-score, fig.width = 11, fig.height = 5}
+
+# add key event markers
+key_events <- tribble(
+  ~hour,                          ~label,               ~y,
+  ymd_hms("2046-05-29T09:11:00"), "@Elena post",         6.5,
+  ymd_hms("2046-05-31T09:00:00"), "SaltWind Piece 1",    7.0,
+  ymd_hms("2046-06-04T09:00:00"), "SaltWind Piece 2",    8.0,
+  ymd_hms("2046-06-05T09:00:00"), "Crisis Day",          9.0
+)
+
+ggplot(risk_score_tbl, aes(x = round_hour, y = risk_score)) +
+
+  # risk threshold zones
+  annotate("rect", xmin = -Inf, xmax = Inf,
+           ymin = 0, ymax = 4,   fill = "#E8F5E9", alpha = 0.5) +
+  annotate("rect", xmin = -Inf, xmax = Inf,
+           ymin = 4, ymax = 7,   fill = "#FFF9C4", alpha = 0.5) +
+  annotate("rect", xmin = -Inf, xmax = Inf,
+           ymin = 7, ymax = 10,  fill = "#FFEBEE", alpha = 0.5) +
+
+  # zone labels
+  annotate("text", x = ymd_hms("2046-05-17T09:00:00"),
+           y = 2,   label = "Low risk",      hjust = 0,
+           size = 3, colour = "#2E7D32", fontface = "italic") +
+  annotate("text", x = ymd_hms("2046-05-17T09:00:00"),
+           y = 5.5, label = "Elevated risk", hjust = 0,
+           size = 3, colour = "#F57F17", fontface = "italic") +
+  annotate("text", x = ymd_hms("2046-05-17T09:00:00"),
+           y = 8.5, label = "Critical risk", hjust = 0,
+           size = 3, colour = "#B71C1C", fontface = "italic") +
+
+  # embargo line
+  geom_vline(xintercept = as.numeric(embargo_date),
+             colour = "#E65100", linetype = "dashed", linewidth = 0.8) +
+  annotate("text", x = embargo_date, y = 9.5,
+           label = "Embargo", hjust = -0.1,
+           size = 3, colour = "#E65100", fontface = "italic") +
+
+  # judge assigned line
+  geom_vline(xintercept = as.numeric(judge_start),
+             colour = "#5F5E5A", linetype = "dashed", linewidth = 0.8) +
+  annotate("text", x = judge_start, y = 9.5,
+           label = "Judge assigned", hjust = -0.1,
+           size = 3, colour = "#5F5E5A", fontface = "italic") +
+
+  # risk score line
+  geom_line(colour = "#1565C0", linewidth = 1.3) +
+  geom_point(aes(colour = risk_score), size = 4) +
+  scale_colour_gradient(low = "#4CAF50", high = "#B71C1C",
+                        name = "Risk score", limits = c(0, 10)) +
+
+  # key event annotations
+  geom_vline(data = key_events,
+             aes(xintercept = as.numeric(hour)),
+             colour = "#C62828", linetype = "dotted", linewidth = 0.6) +
+  geom_label(data = key_events,
+             aes(x = hour, y = y, label = label),
+             size = 2.8, colour = "#C62828",
+             label.padding = unit(0.2, "lines"),
+             fill = "white", show.legend = FALSE) +
+
+  scale_x_datetime(date_labels = "%b %d", date_breaks = "3 days") +
+  #scale_y_continuous(limits = c(0, 10), breaks = seq(0, 10, 2)) +
+
+  labs(
+    title    = "Platform Trust internal risk score — leading indicator",
+    subtitle = "Risk score extracted from agent deliberating field. Scored /10.",
+    x = NULL, y = "Risk score (/10)"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    legend.position = "right",
+    axis.text.x     = element_text(angle = 45, hjust = 1)
+  )
+```
+
+ 
+
+### (b) Personal/anonymous post timeline
+
+*All personal and anonymous posts across all 23 rounds.
+Risky content = posts hinting at merger, exciting developments, or embargo-adjacent language.
+These posts established a posting habit that later broke the embargo.*
+
+```{r q3b-informal-posts, fig.width = 11, fig.height = 5}
+
+ggplot(informal_posts_tbl,
+       aes(x = round_hour, y = agent_label,
+           colour = risk_label, shape = channel)) +
+
+  # period backgrounds
+  annotate("rect",
+           xmin = as.numeric(start_date),
+           xmax = as.numeric(embargo_date),
+           ymin = -Inf, ymax = Inf,
+           fill = "#E3F2FD", alpha = 0.3) +
+  annotate("rect",
+           xmin = as.numeric(embargo_date),
+           xmax = as.numeric(ymd_hms("2046-06-05T00:00:00")),
+           ymin = -Inf, ymax = Inf,
+           fill = "#FFF3E0", alpha = 0.3) +
+  annotate("rect",
+           xmin = as.numeric(ymd_hms("2046-06-05T00:00:00")),
+           xmax = as.numeric(end_date),
+           ymin = -Inf, ymax = Inf,
+           fill = "#FFEBEE", alpha = 0.3) +
+
+  # embargo line
+  geom_vline(xintercept = as.numeric(embargo_date),
+             colour = "#E65100", linetype = "dashed", linewidth = 0.8) +
+
+  # elena post marker
+  geom_vline(xintercept = as.numeric(elena_post_time),
+             colour = "#B71C1C", linetype = "solid", linewidth = 1) +
+
+
+  geom_jitter(size = 4, height = 0.15, alpha = 0.85) +
+
+  scale_colour_manual(
+    values = c("Risky content" = "#C62828", "Benign content" = "#1565C0"),
+    name   = "Content type"
+  ) +
+  scale_shape_manual(
+    values = c("personal_post" = 16, "anonymous_post" = 17),
+    name   = "Channel",
+    labels = c("personal_post" = "Personal post",
+               "anonymous_post" = "Anonymous post")
+  ) +
+  scale_x_datetime(date_labels = "%b %d", date_breaks = "3 days") +
+
+  labs(
+    title    = "Personal and anonymous posts — all 23 rounds",
+    subtitle = paste0(
+      "Blue shading = Pre-Embargo  |  Orange = Post-Embargo  |  Red = Crisis Day\n",
+      "Triangles = anonymous post. Circles = personal post.\n",
+      "Red points = content hinting at merger/embargo. Red line = @Elena post."
+    ),
+    x = NULL, y = NULL
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x     = element_text(angle = 45, hjust = 1),
+    legend.position = "bottom"
+  )
+```
+
+### (c) Oversight gap
+
+Why prior occasions went unnoticed
+
+```{r q3c-oversight-gap, fig.width = 11, fig.height = 4}
+
+oversight_tbl <- tibble(
+  mechanism = c("Judge / Compliance monitor",
+                "Embargo in force",
+                "Social hold"),
+  start     = c(judge_start,
+                embargo_date,
+                embargo_date),
+  end       = c(end_date,
+                end_date,
+                end_date),
+  colour    = c("#5F5E5A", "#E65100", "#1565C0")
+)
+
+# risky posts before judge was assigned
+pre_oversight_posts <- informal_posts_tbl %>%
+  filter(round_hour < judge_start, is_risky) %>%
+  mutate(mechanism = "Judge / Compliance monitor")  # pin to one row
+
+ggplot() +
+
+  # no oversight shading
+  annotate("rect",
+           xmin  = as.numeric(start_date),
+           xmax  = as.numeric(judge_start),
+           ymin  = -Inf, ymax = Inf,
+           fill  = "#FFEBEE", alpha = 0.3) +
+
+  # oversight bars
+  geom_segment(
+    data = oversight_tbl,
+    aes(x = start, xend = end,
+        y = mechanism, yend = mechanism,
+        colour = colour),
+    linewidth = 8, alpha = 0.5
+  ) +
+  scale_colour_identity() +
+
+  # risky posts as points on the Judge row
+  geom_point(
+    data   = pre_oversight_posts,
+    aes(x  = round_hour, y = mechanism),
+    colour = "#C62828", size = 4, shape = 17
+  ) +
+  geom_text(
+    data     = pre_oversight_posts,
+    aes(x    = round_hour, y = mechanism,
+        label = agent_label),
+    colour   = "#C62828",
+    size     = 2.8,
+    angle    = 45,
+    hjust    = 0,
+    vjust    = -1
+  ) +
+
+  # key vertical lines
+  geom_vline(xintercept = as.numeric(embargo_date),
+             colour = "#E65100", linetype = "dashed", linewidth = 0.8) +
+  geom_vline(xintercept = as.numeric(elena_post_time),
+             colour = "#B71C1C", linetype = "solid",  linewidth = 1) +
+  geom_vline(xintercept = as.numeric(judge_start),
+             colour = "#5F5E5A", linetype = "dashed", linewidth = 0.8) +
+
+  scale_x_datetime(date_labels = "%b %d", date_breaks = "3 days") +
+  scale_y_discrete(expand = expansion(add = 0.8)) +
+
+  labs(
+    title    = "Oversight gap — why prior occasions went unnoticed",
+    subtitle = paste0(
+      "Coloured bars = when each oversight mechanism was active.\n",
+      "Red triangles = risky personal posts made BEFORE compliance monitoring existed.\n",
+      "Dashed orange = embargo declared | Red solid = @Elena post | Dashed grey = Judge assigned."
+    ),
+    x = NULL, y = NULL
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x      = element_text(angle = 45, hjust = 1),
+    axis.text.y      = element_text(size = 11),
+    panel.grid.minor = element_blank()
+  )
+```
+
+
+
+::::

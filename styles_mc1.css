@@ -1,0 +1,25 @@
+/* Table row hover */
+.gt_table tbody tr:hover > td {
+  background-color: #f0f4ff !important;
+}
+
+/* Column widths */
+.gt_col_heading:nth-child(8),   /* Narrative */
+.gt_body_row td:nth-child(8) {
+  min-width: 400px;
+  white-space: normal;
+}
+
+.gt_col_heading:nth-child(7),   /* Event */
+.gt_body_row td:nth-child(7) {
+  min-width: 220px;
+  white-space: normal;
+}
+
+/* All other columns — compact */
+.gt_col_heading:nth-child(-n+6),
+.gt_body_row td:nth-child(-n+6) {
+  min-width: 60px;
+  max-width: 100px;
+  white-space: nowrap;
+}
