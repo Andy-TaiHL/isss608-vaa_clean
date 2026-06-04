@@ -12,4 +12,7 @@ data/
 *.csv
 *.rds
 *.xlsx
-*.parquet
+*.parquetdata/
+*.csv
+*.rds
+*.xlsx
