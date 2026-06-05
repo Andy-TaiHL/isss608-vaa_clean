@@ -1,0 +1,108 @@
+[33mcommit dc123656de4f32b5f478394a655458a5941e2b0a[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;31morigin/main[m[33m, [m[1;31morigin/HEAD[m[33m)[m
+Author: Andy-TaiHL <taihocklin@gmail.com>
+Date:   Thu Jun 4 21:35:20 2026 +0800
+
+    Fix quarto.yml indentation
+
+ _quarto.yml                                        |     2 [32m+[m[31m-[m
+ hands-on_ex01.html                                 |  5515 [32m++++++++[m
+ hands-on_ex02.html                                 |  5474 [32m++++++++[m
+ hands-on_ex03a.html                                |  9423 [32m+++++++++++++[m
+ hands-on_ex03b.html                                |  7267 [32m++++++++++[m
+ hands-on_ex04a.html                                |  5161 [32m+++++++[m
+ hands-on_ex04b.html                                |  5575 [32m++++++++[m
+ hands-on_ex04c.html                                |  9311 [32m++++++++++++[m
+ hands-on_ex04d.html                                |  6853 [32m+++++++++[m
+ hands-on_ex05a.html                                |  6945 [32m+++++++++[m
+ hands-on_ex05b.html                                |  5298 [32m+++++++[m
+ hands-on_ex05c.html                                |  7023 [32m++++++++++[m
+ hands-on_ex05d.html                                | 13993 [32m+++++++++++++++++++[m
+ hands-on_ex05e.html                                |  5124 [32m+++++++[m
+ hands-on_ex06a.html                                | 10874 [32m++++++++++++++[m
+ .../figure-html/unnamed-chunk-10-1.png             |   Bin [31m65568[m -> [32m0[m bytes
+ .../figure-html/unnamed-chunk-11-1.png             |   Bin [31m54066[m -> [32m0[m bytes
+ .../figure-html/unnamed-chunk-12-1.png             |   Bin [31m48916[m -> [32m0[m bytes
+ .../figure-html/unnamed-chunk-13-1.png             |   Bin [31m59081[m -> [32m0[m bytes
+ .../figure-html/unnamed-chunk-14-1.png             |   Bin [31m66415[m -> [32m0[m bytes
+ .../figure-html/unnamed-chunk-15-1.png             |   Bin [31m62132[m -> [32m0[m bytes
+ .../figure-html/unnamed-chunk-16-1.png             |   Bin [31m49515[m -> [32m0[m bytes
+ .../figure-html/unnamed-chunk-17-1.png             |   Bin [31m105671[m -> [32m0[m bytes
+ .../figure-html/unnamed-chunk-18-1.png             |   Bin [31m78742[m -> [32m0[m bytes
+ .../figure-html/unnamed-chunk-19-1.png             |   Bin [31m204537[m -> [32m0[m bytes
+ .../figure-html/unnamed-chunk-20-1.png             |   Bin [31m87239[m -> [32m0[m bytes
+ .../figure-html/unnamed-chunk-21-1.png             |   Bin [31m202636[m -> [32m0[m bytes
+ .../figure-html/unnamed-chunk-22-1.png             |   Bin [31m90933[m -> [32m0[m bytes
+ .../figure-html/unnamed-chunk-23-1.png             |   Bin [31m34904[m -> [32m0[m bytes
+ .../figure-html/unnamed-chunk-24-1.png             |   Bin [31m98540[m -> [32m0[m bytes
+ .../figure-html/unnamed-chunk-25-1.png             |   Bin [31m104628[m -> [32m0[m bytes
+ .../figure-html/unnamed-chunk-26-1.png             |   Bin [31m112563[m -> [32m0[m bytes
+ .../figure-html/unnamed-chunk-9-1.png              |   Bin [31m410184[m -> [32m0[m bytes
+ index.html                                         |  4570 [32m++++++[m
+ search.json                                        |  1038 [32m++[m
+ site_libs/DiagrammeR-styles-0.2/styles.css         |    14 [32m+[m
+ .../bootstrap-grid-3.4.1/bootstrap-grid.min.css    |     1 [32m+[m
+ ...tstrap-267efaf477eec0fe62d4fb3579b721f4.min.css |    12 [32m+[m
+ ...tstrap-d70271683aa93feafeb583e606870e3f.min.css |    12 [32m+[m
+ site_libs/bootstrap/bootstrap-icons.css            |  2106 [32m+++[m
+ site_libs/bootstrap/bootstrap-icons.woff           |   Bin [31m0[m -> [32m180288[m bytes
+ site_libs/bootstrap/bootstrap.min.js               |     7 [32m+[m
+ site_libs/clipboard/clipboard.min.js               |     7 [32m+[m
+ .../collapsibleTree-0.1.6/collapsibleTree.css      |    30 [32m+[m
+ site_libs/collapsibleTree-0.1.6/d3-4.10.2/LICENSE  |    27 [32m+[m
+ .../collapsibleTree-0.1.6/d3-4.10.2/d3.min.js      |     2 [32m+[m
+ .../collapsibleTree.js                             |   318 [32m+[m
+ site_libs/colourpicker-1.1/LICENSE                 |     7 [32m+[m
+ site_libs/colourpicker-1.1/colourpicker.min.css    |     1 [32m+[m
+ site_libs/colourpicker-1.1/colourpicker.min.js     |     2 [32m+[m
+ site_libs/crosstalk-1.2.2/css/crosstalk.min.css    |     1 [32m+[m
+ site_libs/crosstalk-1.2.2/js/crosstalk.js          |  1474 [32m++[m
+ site_libs/crosstalk-1.2.2/js/crosstalk.js.map      |    37 [32m+[m
+ site_libs/crosstalk-1.2.2/js/crosstalk.min.js      |     2 [32m+[m
+ site_libs/crosstalk-1.2.2/js/crosstalk.min.js.map  |     1 [32m+[m
+ site_libs/crosstalk-1.2.2/scss/crosstalk.scss      |    75 [32m+[m
+ site_libs/d3-3.5.5/LICENSE                         |    26 [32m+[m
+ site_libs/d3-3.5.5/README.md                       |     9 [32m+[m
+ site_libs/d3-3.5.5/d3.min.js                       |     5 [32m+[m
+ site_libs/d3-4.10.2/LICENSE                        |    27 [32m+[m
+ site_libs/d3-4.10.2/d3.min.js                      |     2 [32m+[m
+ site_libs/d3tree-0.1/d3tree.css                    |    33 [32m+[m
+ site_libs/d3tree-binding-0.1/d3tree.js             |   397 [32m+[m
+ site_libs/d3tree2-0.1/d3tree2.css                  |    53 [32m+[m
+ site_libs/d3tree2-binding-0.1/d3tree2.js           |   339 [32m+[m
+ site_libs/datatables-binding-0.34.0/datatables.js  |  1539 [32m++[m
+ .../datatables-css-0.0.0/datatables-crosstalk.css  |    32 [32m+[m
+ .../dt-core-1.13.6/css/jquery.dataTables.extra.css |    28 [32m+[m
+ .../dt-core-1.13.6/css/jquery.dataTables.min.css   |     1 [32m+[m
+ .../dt-core-1.13.6/js/jquery.dataTables.min.js     |     4 [32m+[m
+ .../css/scroller.dataTables.min.css                |     1 [32m+[m
+ .../js/dataTables.scroller.min.js                  |     4 [32m+[m
+ site_libs/ggiraphjs-0.9.4/girafe.css               |   195 [32m+[m
+ site_libs/ggiraphjs-0.9.4/girafe.js                |     1 [32m+[m
+ site_libs/ggiraphjs-0.9.4/girafe.yaml              |     6 [32m+[m
+ site_libs/girafe-binding-0.9.6/girafe.js           |     1 [32m+[m
+ site_libs/grViz-binding-1.0.12/grViz.js            |    90 [32m+[m
+ site_libs/htmltools-fill-0.5.9/fill.css            |    21 [32m+[m
+ site_libs/htmlwidgets-1.6.4/htmlwidgets.js         |   901 [32m++[m
+ site_libs/jquery-3.5.1/jquery-AUTHORS.txt          |   357 [32m+[m
+ site_libs/jquery-3.5.1/jquery.js                   | 10872 [32m++++++++++++++[m
+ site_libs/jquery-3.5.1/jquery.min.js               |     2 [32m+[m
+ site_libs/jquery-3.5.1/jquery.min.map              |     1 [32m+[m
+ site_libs/jquery-3.6.0/jquery-3.6.0.js             | 10881 [32m++++++++++++++[m
+ site_libs/jquery-3.6.0/jquery-3.6.0.min.js         |     2 [32m+[m
+ site_libs/jquery-3.6.0/jquery-3.6.0.min.map        |     1 [32m+[m
+ site_libs/jsonedit-binding-4.0.0/jsonedit.js       |    38 [32m+[m
+ site_libs/jsoneditor-0.18.7/jsoneditor.min.js      |   141 [32m+[m
+ site_libs/kePrint-0.0.1/kePrint.js                 |     8 [32m+[m
+ .../liberation-mono-0.5.0/css/liberation-mono.css  |    35 [32m+[m
+ site_libs/liberation-mono-0.5.0/fonts/AUTHORS      |    12 [32m+[m
+ site_libs/liberation-mono-0.5.0/fonts/ChangeLog    |    14 [32m+[m
+ site_libs/liberation-mono-0.5.0/fonts/LICENSE      |   102 [32m+[m
+ .../fonts/LiberationMono-Bold.ttf                  |   Bin [31m0[m -> [32m301684[m bytes
+ .../fonts/LiberationMono-Bold.woff                 |   Bin [31m0[m -> [32m170048[m bytes
+ .../fonts/LiberationMono-BoldItalic.ttf            |   Bin [31m0[m -> [32m277912[m bytes
+ .../fonts/LiberationMono-BoldItalic.woff           |   Bin [31m0[m -> [32m161932[m bytes
+ .../fonts/LiberationMono-Italic.ttf                |   Bin [31m0[m -> [32m274984[m bytes
+ .../fonts/LiberationMono-Italic.woff               |   Bin [31m0[m -> [32m159520[m bytes
+ .../fonts/LiberationMono-Regular.ttf               |   Bin [31m0[m -> [32m313408[m bytes
+ .../fonts/LiberationMono-Regular.woff              |   Bin [31m0[m -> [32m174892[m bytes
+ .../fonts/LiberationSa
