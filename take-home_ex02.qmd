@@ -38,7 +38,7 @@ We shall import tidyverse and other useful R libraries to aid our analysis.
 #| results: hide
 
 pacman::p_load(tidyverse, patchwork, ggrepel, ggiraph, DT, 
-  gifski, plotly, gganimate, ggpp, ggtext, ggdist, ggridges, colorspace, geomtextpath, nord, nortest, seriation, dendextend, heatmaply, ggstatsplot, jsonlite, janitor, listviewer, gt, lubridate, scales, tidytext, proxy, cluster, wordcloud2, htmlwidgets, ggwordcloud, stringr, DiagrammeR, tidygraph, ggraph, igraph, kableExtra) 
+  gifski, plotly, gganimate, ggpp, ggtext, ggdist, ggridges, colorspace, geomtextpath, nord, nortest, seriation, dendextend, heatmaply, ggstatsplot, jsonlite, janitor, listviewer, gt, lubridate, scales, tidytext, proxy, cluster, wordcloud2, htmlwidgets, ggwordcloud, stringr, DiagrammeR, tidygraph, ggraph, igraph, kableExtra, widyr, text2vec) 
 ```
 
 ### (b) Import & understand data
@@ -1572,6 +1572,10 @@ p_post <- post_freq %>%
 ```
 
 ### (c) Deep-dive on private chats
+
+::: {.panel-tabset}
+
+#### (i) data table
 ```{r private-convos}
 #| include: false
 
@@ -1706,10 +1710,372 @@ datatable(
 ```
 :::
 
+#### (ii) word clouds
+
+##### Data Preparation
+Earlier, we examined word clouds drawn from all communication channels to contrast language patterns before and after the embargo. In this section, we zoom into the private channels specifically — side huddles and one-on-one messages — to surface the behind-the-scenes conversations that were never visible to the full team.
+
+To focus the analysis further, we introduced a set of crisis-relevant seed words (risk, embargo, leak, merger, legal, compliance, anonymous, monitor, breach, exposure) and used cosine similarity on a TF-IDF term-document matrix to identify words that were contextually associated with these seeds within the private channel corpus. Only words exceeding a similarity threshold of 0.15 were retained. This ensures the word clouds and semantic network reflect language that is analytically meaningful to the crisis — filtering out general chatter and surfacing the vocabulary agents actually used when discussing sensitive matters in private.
+
+##### Insights from Word Clouds (based on cosine-similarity)
+* The pre-embargo private channels were strikingly sparse — agents used vague, cautious language (trust, governance, window, handle) even in private, suggesting deliberate restraint in committing to specifics despite awareness that something material was coming.
+
+* Post-embargo private language exploded in both volume and specificity. Three distinct clusters emerged: a legal/compliance cluster (governance, audit, reforms, accountability, obligation) reflecting active exposure management; a crisis actor cluster (saltwind, civicloom, oceancrunch) showing external parties had moved from background concern to front-of-mind; and a time pressure cluster (minutes, tonight, window, permanent) signalling real-time crisis execution rather than planned communication.
+
+* The contrast is analytically significant — the sparseness of pre-embargo private language suggests the team knew more than they were saying even in private, while the post-embargo density reveals the crisis forced specificity that careful embargo management had been suppressing.
+
+```{r cosine-setup}
+pacman::p_load(text2vec, tidytext, ggraph, tidygraph, ggwordcloud, DT)
+
+# ── seed words ────────────────────────────────────────────────────────────────
+seed_words <- c(
+  "risk", "embargo", "leak", "merger", "legal",
+  "compliance", "anonymous", "monitor", "breach", "exposure"
+)
+
+# ── stopwords ─────────────────────────────────────────────────────────────────
+extra_stops <- c(
+  stop_words$word,
+  "the","and","for","this","that","with","are","have","will",
+  "from","been","they","their","what","need","can","all","not",
+  "but","its","our","any","has","was","re","s","t","it","is",
+  "in","on","at","to","of","a","i","be","do","so","if","no",
+  "up","or","an","as","by","we","he","she","him","her","us",
+  "my","me","would","should","could","make","know","going",
+  "right","team","want","now","good","take","think","time",
+  "use","see","just","also","one","get","let","out","more",
+  "about","very","here","there","when","then","them","these",
+  "those","into","even","both","back","well","still",
+  "platform_trust","social_manager","legal_agent",
+  "pr_agent","pr_intern","judge_agent","intern_agent"
+)
+
+# ── prepare corpus from private_tbl ──────────────────────────────────────────
+corpus <- private_tbl %>%
+  mutate(
+    message_id = as.character(row_number()),
+    content    = str_to_lower(Content) %>%
+                 str_replace_all("[^a-z\\s]", " ") %>%
+                 str_squish()
+  ) %>%
+  select(message_id, content) %>%
+  deframe()
+
+# ── build vocabulary ──────────────────────────────────────────────────────────
+it <- itoken(corpus, tokenizer = word_tokenizer, progressbar = FALSE)
+
+vocab <- create_vocabulary(it) %>%
+  prune_vocabulary(term_count_min = 2, doc_count_min = 1) %>%
+  filter(!term %in% extra_stops, nchar(term) > 2)
+
+vectoriser  <- vocab_vectorizer(vocab)
+dtm         <- create_dtm(it, vectoriser)
+tfidf       <- TfIdf$new()
+dtm_tfidf   <- fit_transform(dtm, tfidf)
+tdm         <- Matrix::t(dtm_tfidf)
+
+# ── cosine similarity ─────────────────────────────────────────────────────────
+similarity_threshold <- 0.15
+
+sim_results <- map_dfr(seed_words, function(seed) {
+  if (!seed %in% rownames(tdm)) return(NULL)
+  seed_vec <- tdm[seed, , drop = FALSE]
+  all_sims <- sim2(tdm, seed_vec, method = "cosine", norm = "l2")
+  tibble(
+    seed       = seed,
+    word       = rownames(all_sims),
+    similarity = as.numeric(all_sims)
+  ) %>%
+    filter(
+      word != seed,
+      !word %in% seed_words,
+      !word %in% extra_stops,
+      similarity > similarity_threshold
+    ) %>%
+    slice_max(similarity, n = 12)
+})
+
+# ── seed-associated vocabulary for word clouds ────────────────────────────────
+seed_vocab <- sim_results %>% pull(word) %>% unique()
+
+# ── word frequency filtered to seed vocab ────────────────────────────────────
+get_seed_freq <- function(period_filter) {
+  private_tbl %>%
+    filter(Period == period_filter) %>%
+    mutate(message_id = row_number()) %>%
+    unnest_tokens(word, Content) %>%
+    filter(
+      word %in% seed_vocab,
+      !word %in% extra_stops,
+      str_length(word) > 2
+    ) %>%
+    count(word, sort = TRUE) %>%
+    rename(freq = n)
+}
+
+pre_freq  <- get_seed_freq("Pre-Embargo")
+post_freq <- get_seed_freq("Post-Embargo")
+
+# ── network graph ─────────────────────────────────────────────────────────────
+cosine_edges <- sim_results %>%
+  rename(from = seed, to = word, weight = similarity)
+
+network_nodes <- tibble(
+  name    = unique(c(cosine_edges$from, cosine_edges$to)),
+  is_seed = name %in% seed_words
+)
+
+cosine_graph <- cosine_edges %>%
+  as_tbl_graph() %>%
+  activate(nodes) %>%
+  left_join(network_nodes, by = "name") %>%
+  mutate(is_seed = coalesce(is_seed, FALSE))
+```
+
+```{r cosine-wordclouds, fig.width = 14, fig.height = 6}
+#| echo: false
+
+p_pre <- pre_freq %>%
+  slice_max(freq, n = 50) %>%
+  mutate(angle = sample(c(0, 90), n(), replace = TRUE,
+                        prob = c(0.7, 0.3))) %>%
+  ggplot(aes(label = word, size = freq,
+             colour = freq, angle = angle)) +
+  geom_text_wordcloud(eccentricity = 0.65, seed = 42) +
+  scale_size_area(max_size = 16) +
+  scale_colour_gradientn(
+    colours = c("#42A5F5", "#1D9E75", "#1565C0")
+  ) +
+  labs(
+    title    = "Pre-Embargo (May 17–22)",
+    subtitle = "Seed-associated words only"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title    = element_text(size = 13, face = "bold",
+                                 colour = "#1565C0", hjust = 0.5),
+    plot.subtitle = element_text(size = 9, colour = "grey40",
+                                 hjust = 0.5),
+    panel.grid    = element_blank(),
+    axis.text     = element_blank()
+  )
+
+p_post <- post_freq %>%
+  slice_max(freq, n = 50) %>%
+  mutate(angle = sample(c(0, 90), n(), replace = TRUE,
+                        prob = c(0.7, 0.3))) %>%
+  ggplot(aes(label = word, size = freq,
+             colour = freq, angle = angle)) +
+  geom_text_wordcloud(eccentricity = 0.65, seed = 42) +
+  scale_size_area(max_size = 16) +
+  scale_colour_gradientn(
+    colours = c("#F57F17", "#E65100", "#B71C1C")
+  ) +
+  labs(
+    title    = "Post-Embargo (May 23–Jun 5)",
+    subtitle = "Seed-associated words only"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title    = element_text(size = 13, face = "bold",
+                                 colour = "#B71C1C", hjust = 0.5),
+    plot.subtitle = element_text(size = 9, colour = "grey40",
+                                 hjust = 0.5),
+    panel.grid    = element_blank(),
+    axis.text     = element_blank()
+  )
+
+(p_pre | p_post) +
+  plot_annotation(
+    title    = "Word clouds — seed-associated terms (private channels)",
+    subtitle = paste0(
+      "Only words with cosine similarity > ", similarity_threshold,
+      " to at least one seed word are shown.\n",
+      "Word size = frequency in private messages."
+    ),
+    theme = theme(
+      plot.title    = element_text(size = 14, face = "bold"),
+      plot.subtitle = element_text(size = 10, colour = "grey40")
+    )
+  )
+```
+
+
+#### (iii) semantic network
+
+The **semantic network** visualises cosine similarity scores between seed words and their associated terms. Nodes connected by thicker edges share stronger contextual similarity in the private channel corpus. Only words exceeding the 0.15 threshold are shown, keeping the network focused on analytically relevant associations.
+
+The top three most interesting clusters and insights gathered are:
+
+* **breach cluster** — the words `elenamarquez`, `accidentally`, `justification`, `mac`, and `survival` reconstruct the @Elena incident in a single cluster. `accidentally` and `justification` suggest agents were privately framing the breach as unintentional, while `mac` (which stands for Material Adverse Change) and `survival` reveal they understood the real stakes — the breach had potentially handed CivicLoom a Material Adverse Change clause exit from the merger without penalty.
+
+* **legal cluster** — `civicloom`, `saltwind`, `oceancrunch`, `minutes`, and `governance` all orbit `legal`, confirming Legal was simultaneously managing all external parties — press, merger counterparty, and enterprise clients — from a single coordination point.
+
+* **risk cluster** — `incident`, `inquiries`, `calculus`, `shrinking`, `investment`, `revenue`, and `contained` surround `risk`. The words `shrinking` and `revenue` confirm agents were privately connecting the crisis to financial fundamentals, not just reputational damage.  The word `calculus` is particularly telling — agents were not reacting emotionally to risk but performing deliberate cost-benefit reasoning. `inquiries` links back to the AG investigations. The word calculus is the most telling – it comes from CEO Ajay’s private language: “the risk calculus changes significantly”. The agents were not utilising general risk terminology but instead were echoing the CEO’s own framing, implying that the private risk reasoning of the entire team was being shaped top-down by signals from Ajay.
+
+```{r cosine-network-plot, fig.width = 14, fig.height = 9}
+#| echo: false
+
+ggraph(cosine_graph, layout = "fr") +
+  geom_edge_link(
+    aes(width = weight, alpha = weight),
+    colour      = "grey55",
+    show.legend = FALSE
+  ) +
+  scale_edge_width(range  = c(0.2, 3),    guide = "none") +
+  scale_edge_alpha(range  = c(0.15, 0.9), guide = "none") +
+  geom_node_point(
+    data   = . %>% filter(!is_seed),
+    colour = "#3266ad", size = 4, alpha = 0.75
+  ) +
+  geom_node_point(
+    data   = . %>% filter(is_seed),
+    colour = "#B71C1C", size = 10, alpha = 0.9
+  ) +
+  geom_node_label(
+    aes(
+      label    = name,
+      colour   = if_else(is_seed, "#B71C1C", "#1565C0"),
+      fontface = if_else(is_seed, "bold", "plain")
+    ),
+    size          = 3.5,
+    repel         = TRUE,
+    label.padding = unit(0.25, "lines"),
+    show.legend   = FALSE
+  ) +
+  scale_colour_identity() +
+  labs(
+    title    = "Semantic network — cosine similarity (private channels)",
+    subtitle = paste0(
+      "Red = seed words  |  Blue = associated terms\n",
+      "Edge thickness = cosine similarity  |  ",
+      "Threshold = ", similarity_threshold
+    )
+  ) +
+  theme_graph(base_family = "sans", base_size = 12) +
+  theme(
+    plot.title    = element_text(size = 14, face = "bold"),
+    plot.subtitle = element_text(size = 10, colour = "grey40")
+  )
+```
+
+#### (iv) TF-IDF
+
+While cosine similarity identifies words contextually associated with crisis seed terms, **TF-IDF ((Term Frequency-Inverse Document Frequency)** complements this by revealing what is distinctive about each agent's private vocabulary relative to others. 
+
+By clicking on the 'Cosine similarity' column to order it in descending order. The four strongest associations are: `thinner` (0.882), `logged` (0.881), `noted` (0.879), creates (0.831). 
+
+It is worth noting that `monitor` carries several distinct meanings in this corpus, which the cosine similarity analysis captures in aggregate:
+
+* **Compliance monitor** — the Judge agent assigned post-breach on May 30 (For information, 'compliance monitor' actually refers to the `judge_agent` as evident in the 1-on-1 content on May 29 in the data table below.)
+* **Risk monitoring** — Platform Trust's internal risk score tracking
+* **Real-time social surveillance** — Crisis Day monitoring of ResidentIQ IR, @PropTechWatcher, and FTC advocacy groups
+
+Taken together, it means that these words appeared in the most similar message contexts as the word `monitor` across the private channel corpus. In plain terms — whenever agents privately discussed the monitor, they almost always did so in the context of documentation, accountability, and narrowing margins. 
+
+
+```{r cosine-top-words}
+#| echo: false
+
+sim_results %>%
+  group_by(seed) %>%
+  slice_max(similarity, n = 5) %>%
+  ungroup() %>%
+  mutate(similarity = round(similarity, 3)) %>%
+  rename(
+    `Seed word`         = seed,
+    `Associated word`   = word,
+    `Cosine similarity` = similarity
+  ) %>%
+  datatable(
+    rownames = FALSE,
+    filter   = "top",
+    options  = list(
+      pageLength = 10,
+      scrollX    = TRUE,
+      autoWidth  = FALSE,
+      columnDefs = list(
+        list(width = "150px", targets = 0),
+        list(width = "150px", targets = 1),
+        list(width = "150px", targets = 2)
+      )
+    ),
+    caption = "Top 5 words associated with each seed — cosine similarity"
+  ) %>%
+  formatStyle(
+    "Cosine similarity",
+    background         = styleColorBar(c(0, 1), "#BBDEFB"),
+    backgroundSize     = "100% 90%",
+    backgroundRepeat   = "no-repeat",
+    backgroundPosition = "center"
+  ) %>%
+  formatStyle(
+    "Seed word",
+    fontWeight = "bold",
+    color      = "#B71C1C"
+  )
+```
+
+```{r monitor-evidence}
+#| echo: false
+
+private_tbl %>%
+  filter(
+    str_detect(
+      str_to_lower(Content),
+      "monitor|logged|noted|thinner|creates|minimum"
+    )
+  ) %>%
+  mutate(
+    matched = str_extract_all(
+      str_to_lower(Content),
+      "monitor|logged|noted|thinner|creates|minimum"
+    ) %>% map_chr(~paste(unique(.x), collapse = ", "))
+  ) %>%
+  select(Date, Period, Channel, From, Content, matched) %>%
+  datatable(
+    rownames = FALSE,
+    filter   = "top",
+    options  = list(
+      pageLength = 5,
+      scrollX    = TRUE,
+      autoWidth  = FALSE,
+      initComplete = JS("
+        function(settings, json) {
+          var api = this.api();
+          $(api.table().node()).css('font-size', '11px');
+          api.columns(0).nodes().to$().css('min-width', '80px').css('max-width', '80px');
+          api.columns(1).nodes().to$().css('min-width', '80px').css('max-width', '80px');
+          api.columns(2).nodes().to$().css('min-width', '80px').css('max-width', '80px');
+          api.columns(3).nodes().to$().css('min-width', '80px').css('max-width', '80px');
+          api.columns(4).nodes().to$().css('min-width', '350px');
+          api.columns(5).nodes().to$().css('min-width', '120px').css('max-width', '120px');
+          api.columns.adjust().draw();
+        }
+      ")
+    ),
+    caption = "Private messages containing monitor-related terms"
+  ) %>%
+  formatStyle(
+    "matched",
+    fontWeight = "bold",
+    color      = "#B71C1C"
+  )
+```
+
+:::
 
 ### (d) Declared vs actual behaviour
 
-swimlane plot
+Below is a swimlane plot created by joining `messages_tbl` (actual channel usage) with the `participants` field (declared actions). The red border means that the agent declared `monitoring` officially, but their actual channel usage shows that they were actually posting on other channels (`anonymous_post`, `personal_post`, or `side_huddle`.)
+
+From the swimlane plot, we note the following:
+
+* **Pre-embargo** — all agents show clean monitoring (light blue) with only official posts (dark blue). Legal's yellow tile on May 22 — side huddle only — is the first signal of off-record activity, one day before the embargo.
+* **Intern-Agent anomaly**  — personal posting (orange) continuously from May 24 through June 1 despite being explicitly excluded from the merger briefing. Posting without awareness of the risk — an uninformed actor operating in an informed crisis.
+* **Social Media and Legal — key divergences on Crisis Day** — both show red borders (declared MONITORING, actual personal/anonymous posting). Legal's dark red tiles are the most analytically significant — the agent responsible for compliance was itself behaving inconsistently with its declared actions.
+* **Judge-Agent** — one grey tile at Jun 5 15:00, otherwise absent. A single compliance warning across the entire observation period confirms the monitor was observational, not preventive.
+* **Platform-Trust-Agent** — clean throughout until Crisis Day afternoon when red borders appear, suggesting even the most disciplined agent shifted under crisis pressure.
 
 ```{r declared-actual-setup}
 #| include: false
@@ -1955,43 +2321,78 @@ diverged_tbl %>%
 
 ## 5 Leading indicators of inappropriate release
 
-```{r q3-setup}
+
+```{r leading-indicators-setup}
 #| include: false
 
-# ── Q3a: Extract risk scores from deliberating field ─────────────────────────
-risk_score_tbl <- map_dfr(raw$rounds, function(r) {
+# ── 1. Personal posts BEFORE breach (habit formation) ────────────────────────
+pre_personal_posts <- messages_tbl %>%
+  filter(
+    channel %in% c("personal_post", "anonymous_post"),
+    round_hour < ymd_hms("2046-05-29T09:00:00")
+  ) %>%
+  mutate(
+    signal_type = "Personal/anonymous post",
+    label       = paste0(agent_label, "\n", str_trunc(content, 60))
+  )
+
+# ── 2. Risk scores from deliberating BEFORE breach ───────────────────────────
+pre_risk_scores <- map_dfr(raw$rounds, function(r) {
+  if (ymd_hms(r$hour) >= ymd_hms("2046-05-29T09:00:00")) return(NULL)
   map_dfr(r$communications, function(m) {
     ist   <- m$internal_state %||% list()
     delib <- ist$deliberating %||% ""
-
-    # extract numeric scores like 4.2/10, 5.8/10, 7.8/10
     scores <- str_extract_all(delib, "\\d+\\.?\\d*(?=\\s*/\\s*10)")[[1]]
-
     if (length(scores) == 0) return(NULL)
-
     tibble(
-      round_hour  = ymd_hms(r$hour),
-      agent_id    = m$agent_id    %||% NA_character_,
-      agent_label = m$agent_label %||% NA_character_,
-      risk_score  = as.numeric(scores[1]),
-      context     = str_trunc(delib, 200)
+      timestamp  = ymd_hms(m$timestamp),
+      agent      = m$agent_label %||% NA_character_,
+      risk_score = as.numeric(scores[1]),
+      context    = delib #str_trunc(delib, 120)
     )
   })
 }) %>%
-  filter(!is.na(risk_score), risk_score <= 10) %>%
-  arrange(round_hour)
+  filter(!is.na(risk_score), risk_score <= 10)
 
-# ── Q3b/c: All personal and anonymous posts across ALL rounds ─────────────────
+# ── 3. Warning signals from deliberating BEFORE breach ───────────────────────
+pre_warnings <- map_dfr(raw$rounds, function(r) {
+  if (ymd_hms(r$hour) >= ymd_hms("2046-05-29T09:00:00")) return(NULL)
+  map_dfr(r$communications, function(m) {
+    ist   <- m$internal_state %||% list()
+    delib <- (ist$deliberating %||% "")
+    if (!str_detect(str_to_lower(delib),
+                    "concern|worry|risk|warning|one bad|narrative|hard to manage|compounding")) {
+      return(NULL)
+    }
+    tibble(
+      timestamp   = ymd_hms(m$timestamp),
+      agent       = m$agent_label %||% NA_character_,
+      signal_type = "Warning in deliberating",
+      excerpt     = delib #str_trunc(delib, 100)
+    )
+  })
+})
+
+# ── breach event marker and elena post time ───────────────────────────────────
+breach_time     <- ymd_hms("2046-05-29T09:11:00")
+elena_post_time <- ymd_hms("2046-05-29T09:11:00")
+
+# ── judge first appearance ────────────────────────────────────────────────────
+judge_start <- messages_tbl %>%
+  filter(agent_id == "judge_agent") %>%
+  summarise(first = min(round_hour)) %>%
+  pull(first)
+
+# ── for q3b-informal-posts chunk ─────────────────────────────────────────────
 informal_posts_tbl <- messages_tbl %>%
   filter(channel %in% c("personal_post", "anonymous_post")) %>%
   mutate(
     period = case_when(
-      round_hour <  embargo_date                        ~ "Pre-Embargo",
+      round_hour <  embargo_date                     ~ "Pre-Embargo",
       round_hour >= embargo_date &
-        as.Date(round_hour) < as.Date("2046-06-05")    ~ "Post-Embargo",
-      TRUE                                              ~ "Crisis Day"
+        as.Date(round_hour) < as.Date(crisis_date)  ~ "Post-Embargo",
+      TRUE                                           ~ "Crisis Day"
     ),
-    # flag posts that hint at merger/embargo content
     is_risky = str_detect(
       str_to_lower(coalesce(content, "")),
       "big things|strategic|civicloom|merger|harborcrest|embargo|elena|exciting|interesting week"
@@ -2000,260 +2401,391 @@ informal_posts_tbl <- messages_tbl %>%
     Date       = format(round_hour, "%d %b %H:%M")
   ) %>%
   arrange(round_hour)
-
-# ── Q3d: Judge assignment timeline ───────────────────────────────────────────
-judge_rounds <- messages_tbl %>%
-  filter(agent_id == "judge_agent") %>%
-  distinct(round_hour) %>%
-  pull(round_hour)
-
-judge_start <- min(judge_rounds)
-elena_post_time <- ymd_hms("2046-05-29T09:11:00")
 ```
 
 :::: {.panel-tabset}
-### (a) Risk score timeline
-Risk score as leading indicator
+### (a) Leading indicators plot
 
+The Platform Trust agent tracks an internal risk score within its private deliberating field, expressed as a value out of 10. This score is extracted using a regex pattern that identifies values in the form x/10. As the only agent that consistently recorded a numerical self-assessment, the score reflects its own perception of the team's accumulating exposure rather than an externally defined measure. 
 
-*Platform Trust's internal risk score extracted from `deliberating` field.
-Score escalated from 4.2 to 8.5 over 10 days — a clear leading indicator
-that was visible internally but not acted on externally.*
+Here, we visualise these scores in a scatter plot over the two-week period to examine risk trends and identify potential leading signals preceding key events.
 
-```{r q3a-risk-score, fig.width = 11, fig.height = 5}
+#### scatter plot on leading indicator risks
 
-# add key event markers
-key_events <- tribble(
-  ~hour,                          ~label,               ~y,
-  ymd_hms("2046-05-29T09:11:00"), "@Elena post",         6.5,
-  ymd_hms("2046-05-31T09:00:00"), "SaltWind Piece 1",    7.0,
-  ymd_hms("2046-06-04T09:00:00"), "SaltWind Piece 2",    8.0,
-  ymd_hms("2046-06-05T09:00:00"), "Crisis Day",          9.0
+```{r leading-indicators-plot, fig.width = 12, fig.height = 7}
+#| echo: false
+
+# ── colour mapping ────────────────────────────────────────────────────────────
+agent_cols <- c(
+  "Legal-Agent"          = "#3266ad",
+  "Platform-Trust-Agent" = "#1D9E75",
+  "Social-Manager-Agent" = "#D85A30",
+  "PR-Agent"             = "#B07EB8",
+  "PR-Intern-Agent"      = "#BA7517",
+  "Intern-Agent"         = "#888780"
 )
-
-ggplot(risk_score_tbl, aes(x = round_hour, y = risk_score)) +
-
-  # risk threshold zones
-  annotate("rect", xmin = -Inf, xmax = Inf,
-           ymin = 0, ymax = 4,   fill = "#E8F5E9", alpha = 0.5) +
-  annotate("rect", xmin = -Inf, xmax = Inf,
-           ymin = 4, ymax = 7,   fill = "#FFF9C4", alpha = 0.5) +
-  annotate("rect", xmin = -Inf, xmax = Inf,
-           ymin = 7, ymax = 10,  fill = "#FFEBEE", alpha = 0.5) +
-
-  # zone labels
-  annotate("text", x = ymd_hms("2046-05-17T09:00:00"),
-           y = 2,   label = "Low risk",      hjust = 0,
-           size = 3, colour = "#2E7D32", fontface = "italic") +
-  annotate("text", x = ymd_hms("2046-05-17T09:00:00"),
-           y = 5.5, label = "Elevated risk", hjust = 0,
-           size = 3, colour = "#F57F17", fontface = "italic") +
-  annotate("text", x = ymd_hms("2046-05-17T09:00:00"),
-           y = 8.5, label = "Critical risk", hjust = 0,
-           size = 3, colour = "#B71C1C", fontface = "italic") +
-
-  # embargo line
-  geom_vline(xintercept = as.numeric(embargo_date),
-             colour = "#E65100", linetype = "dashed", linewidth = 0.8) +
-  annotate("text", x = embargo_date, y = 9.5,
-           label = "Embargo", hjust = -0.1,
-           size = 3, colour = "#E65100", fontface = "italic") +
-
-  # judge assigned line
-  geom_vline(xintercept = as.numeric(judge_start),
-             colour = "#5F5E5A", linetype = "dashed", linewidth = 0.8) +
-  annotate("text", x = judge_start, y = 9.5,
-           label = "Judge assigned", hjust = -0.1,
-           size = 3, colour = "#5F5E5A", fontface = "italic") +
-
-  # risk score line
-  geom_line(colour = "#1565C0", linewidth = 1.3) +
-  geom_point(aes(colour = risk_score), size = 4) +
-  scale_colour_gradient(low = "#4CAF50", high = "#B71C1C",
-                        name = "Risk score", limits = c(0, 10)) +
-
-  # key event annotations
-  geom_vline(data = key_events,
-             aes(xintercept = as.numeric(hour)),
-             colour = "#C62828", linetype = "dotted", linewidth = 0.6) +
-  geom_label(data = key_events,
-             aes(x = hour, y = y, label = label),
-             size = 2.8, colour = "#C62828",
-             label.padding = unit(0.2, "lines"),
-             fill = "white", show.legend = FALSE) +
-
-  scale_x_datetime(date_labels = "%b %d", date_breaks = "3 days") +
-  #scale_y_continuous(limits = c(0, 10), breaks = seq(0, 10, 2)) +
-
-  labs(
-    title    = "Platform Trust internal risk score — leading indicator",
-    subtitle = "Risk score extracted from agent deliberating field. Scored /10.",
-    x = NULL, y = "Risk score (/10)"
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    legend.position = "right",
-    axis.text.x     = element_text(angle = 45, hjust = 1)
-  )
-```
-
- 
-
-### (b) Personal/anonymous post timeline
-
-*All personal and anonymous posts across all 23 rounds.
-Risky content = posts hinting at merger, exciting developments, or embargo-adjacent language.
-These posts established a posting habit that later broke the embargo.*
-
-```{r q3b-informal-posts, fig.width = 11, fig.height = 5}
-
-ggplot(informal_posts_tbl,
-       aes(x = round_hour, y = agent_label,
-           colour = risk_label, shape = channel)) +
-
-  # period backgrounds
-  annotate("rect",
-           xmin = as.numeric(start_date),
-           xmax = as.numeric(embargo_date),
-           ymin = -Inf, ymax = Inf,
-           fill = "#E3F2FD", alpha = 0.3) +
-  annotate("rect",
-           xmin = as.numeric(embargo_date),
-           xmax = as.numeric(ymd_hms("2046-06-05T00:00:00")),
-           ymin = -Inf, ymax = Inf,
-           fill = "#FFF3E0", alpha = 0.3) +
-  annotate("rect",
-           xmin = as.numeric(ymd_hms("2046-06-05T00:00:00")),
-           xmax = as.numeric(end_date),
-           ymin = -Inf, ymax = Inf,
-           fill = "#FFEBEE", alpha = 0.3) +
-
-  # embargo line
-  geom_vline(xintercept = as.numeric(embargo_date),
-             colour = "#E65100", linetype = "dashed", linewidth = 0.8) +
-
-  # elena post marker
-  geom_vline(xintercept = as.numeric(elena_post_time),
-             colour = "#B71C1C", linetype = "solid", linewidth = 1) +
-
-
-  geom_jitter(size = 4, height = 0.15, alpha = 0.85) +
-
-  scale_colour_manual(
-    values = c("Risky content" = "#C62828", "Benign content" = "#1565C0"),
-    name   = "Content type"
-  ) +
-  scale_shape_manual(
-    values = c("personal_post" = 16, "anonymous_post" = 17),
-    name   = "Channel",
-    labels = c("personal_post" = "Personal post",
-               "anonymous_post" = "Anonymous post")
-  ) +
-  scale_x_datetime(date_labels = "%b %d", date_breaks = "3 days") +
-
-  labs(
-    title    = "Personal and anonymous posts — all 23 rounds",
-    subtitle = paste0(
-      "Blue shading = Pre-Embargo  |  Orange = Post-Embargo  |  Red = Crisis Day\n",
-      "Triangles = anonymous post. Circles = personal post.\n",
-      "Red points = content hinting at merger/embargo. Red line = @Elena post."
-    ),
-    x = NULL, y = NULL
-  ) +
-  theme_minimal(base_size = 12) +
-  theme(
-    axis.text.x     = element_text(angle = 45, hjust = 1),
-    legend.position = "bottom"
-  )
-```
-
-### (c) Oversight gap
-
-Why prior occasions went unnoticed
-
-```{r q3c-oversight-gap, fig.width = 11, fig.height = 4}
-
-oversight_tbl <- tibble(
-  mechanism = c("Judge / Compliance monitor",
-                "Embargo in force",
-                "Social hold"),
-  start     = c(judge_start,
-                embargo_date,
-                embargo_date),
-  end       = c(end_date,
-                end_date,
-                end_date),
-  colour    = c("#5F5E5A", "#E65100", "#1565C0")
-)
-
-# risky posts before judge was assigned
-pre_oversight_posts <- informal_posts_tbl %>%
-  filter(round_hour < judge_start, is_risky) %>%
-  mutate(mechanism = "Judge / Compliance monitor")  # pin to one row
 
 ggplot() +
 
-  # no oversight shading
+  # ── background shading ────────────────────────────────────────────────────
   annotate("rect",
-           xmin  = as.numeric(start_date),
-           xmax  = as.numeric(judge_start),
+           xmin  = as.numeric(ymd_hms("2046-05-17T00:00:00")),
+           xmax  = as.numeric(embargo_date),
            ymin  = -Inf, ymax = Inf,
-           fill  = "#FFEBEE", alpha = 0.3) +
+           fill  = "#E3F2FD", alpha = 0.3) +
+  annotate("rect",
+           xmin  = as.numeric(embargo_date),
+           xmax  = as.numeric(breach_time),
+           ymin  = -Inf, ymax = Inf,
+           fill  = "#FFF3E0", alpha = 0.3) +
 
-  # oversight bars
-  geom_segment(
-    data = oversight_tbl,
-    aes(x = start, xend = end,
-        y = mechanism, yend = mechanism,
-        colour = colour),
-    linewidth = 8, alpha = 0.5
+  # ── risk score line ───────────────────────────────────────────────────────
+  geom_line(
+    data    = pre_risk_scores,
+    aes(x   = timestamp, y = risk_score * 0.8),
+    colour  = "#1D9E75", linewidth = 1.2, linetype = "dashed"
   ) +
-  scale_colour_identity() +
-
-  # risky posts as points on the Judge row
   geom_point(
-    data   = pre_oversight_posts,
-    aes(x  = round_hour, y = mechanism),
-    colour = "#C62828", size = 4, shape = 17
+    data    = pre_risk_scores,
+    aes(x   = timestamp, y = risk_score * 0.8),
+    colour  = "#1D9E75", size = 3
   ) +
-  geom_text(
-    data     = pre_oversight_posts,
-    aes(x    = round_hour, y = mechanism,
-        label = agent_label),
-    colour   = "#C62828",
-    size     = 2.8,
-    angle    = 45,
-    hjust    = 0,
-    vjust    = -1
+  geom_label(
+    data    = pre_risk_scores,
+    aes(x   = timestamp, y = risk_score * 0.8 + 0.3,
+        label = paste0(agent, "\nRisk: ", risk_score, "/10")),
+    size    = 2.8, colour = "#1D9E75",
+    label.padding = unit(0.2, "lines"), fill = "white"
   ) +
 
-  # key vertical lines
+  # ── warning signals ───────────────────────────────────────────────────────
+  geom_point(
+    data    = pre_warnings,
+    aes(x   = timestamp, y = 2.5, colour = agent),
+    shape   = 18, size = 5, alpha = 0.8
+  ) +
+ggrepel::geom_text_repel(
+  data    = pre_warnings,
+  aes(x   = timestamp, y = 2.5, label = agent, colour = agent),
+  size         = 2.8,
+  max.overlaps = 20,
+  box.padding  = 0.4,
+  show.legend  = FALSE
+) +
+  # ── personal posts ────────────────────────────────────────────────────────
+  geom_point(
+    data    = pre_personal_posts,
+    aes(x   = round_hour, y = 1.0, colour = agent_label),
+    shape   = 17, size = 4, alpha = 0.8
+  ) +
+ggrepel::geom_text_repel(
+  data    = pre_personal_posts %>% distinct(round_hour, agent_label),
+  aes(x   = round_hour, y = 1.0, label = agent_label, colour = agent_label),
+  size         = 2.8,
+  max.overlaps = 20,
+  box.padding  = 0.4,
+  show.legend  = FALSE
+) +
+
+  # ── embargo line ──────────────────────────────────────────────────────────
   geom_vline(xintercept = as.numeric(embargo_date),
              colour = "#E65100", linetype = "dashed", linewidth = 0.8) +
-  geom_vline(xintercept = as.numeric(elena_post_time),
-             colour = "#B71C1C", linetype = "solid",  linewidth = 1) +
-  geom_vline(xintercept = as.numeric(judge_start),
-             colour = "#5F5E5A", linetype = "dashed", linewidth = 0.8) +
+  annotate("text", x = embargo_date, y = 6.5,
+           label = "Embargo\n(May 23)", hjust = -0.1,
+           size = 3, colour = "#E65100", fontface = "italic") +
 
+  # ── breach line ───────────────────────────────────────────────────────────
+  geom_vline(xintercept = as.numeric(breach_time),
+             colour = "#B71C1C", linewidth = 1.2) +
+  annotate("text", x = breach_time, y = 6.5,
+           label = "@Elena post\n(May 29)", hjust = -0.1,
+           size = 3, colour = "#B71C1C", fontface = "bold") +
+
+  # ── row labels ────────────────────────────────────────────────────────────
+ # annotate("text", x = ymd_hms("2046-05-17T12:00:00"), y = 5.2,
+ #         label = "Risk score (/10)", hjust = 0,
+ #           size = 3, colour = "#1D9E75", fontface = "bold") +
+  # annotate("text", x = ymd_hms("2046-05-17T12:00:00"), y = 2.7,
+  #          label = "Warning signals\n(deliberating)", hjust = 0,
+  #          size = 3, colour = "#555555", fontface = "bold") +
+  # annotate("text", x = ymd_hms("2046-05-17T12:00:00"), y = 1.2,
+  #          label = "Personal posts\n(habit forming)", hjust = 0,
+  #          size = 3, colour = "#555555", fontface = "bold") +
+
+  scale_colour_manual(values = agent_cols, name = "Agent") +
+  scale_x_datetime(date_labels = "%b %d", date_breaks = "3 days") +
+  scale_y_continuous(
+    name   = "Risk score (/10)",
+    limits = c(0, 7)
+  ) +
+
+  labs(
+    title    = "Leading indicators — pre-breach signals (May 17–28)",
+    subtitle = paste0(
+      "Three converging signals before the @Elena post on May 29:\n",
+      "Rising internal risk score (green dashed) | ",
+      "Warning signals in private deliberating (diamonds) | ",
+      "Personal posting habit forming (triangles)"
+    ),
+    x = NULL
+  ) +
+  theme_minimal(base_size = 11) +
+  theme(
+    axis.text.x      = element_text(angle = 45, hjust = 1),
+    legend.position  = "bottom",
+    plot.title       = element_text(size = 13, face = "bold"),
+    plot.subtitle    = element_text(size = 9, colour = "grey40"),
+    panel.grid.minor = element_blank()
+  )
+```
+
+#### Leading indicators table 
+
+```{r leading-indicators-table}
+#| echo: false
+
+bind_rows(
+  pre_personal_posts %>%
+    transmute(
+      timestamp,
+      agent    = agent_label,
+      signal   = "Personal/anonymous post",
+      evidence = content #str_trunc(content, 200)
+    ),
+  pre_warnings %>%
+    transmute(
+      timestamp,
+      agent    = agent,
+      signal   = "Warning in deliberating",
+      evidence = excerpt
+    ),
+  pre_risk_scores %>%
+    transmute(
+      timestamp,
+      agent    = agent,
+      signal   = paste0("Risk score: ", risk_score, "/10"),
+      evidence = context
+    )
+) %>%
+  arrange(timestamp) %>%
+  mutate(Date = format(timestamp, "%d %b %H:%M")) %>%
+  select(Date, Agent = agent, Signal = signal, Evidence = evidence) %>%
+  datatable(
+    rownames = FALSE,
+    filter   = "top",
+    options  = list(
+      pageLength = 5,
+      scrollX    = TRUE,
+       scrollY    = "400px",  
+      autoWidth  = FALSE,
+      initComplete = JS("
+        function(settings, json) {
+          var api = this.api();
+          $(api.table().node()).css('font-size', '11px');
+          api.columns(0).nodes().to$().css('min-width', '90px').css('max-width', '90px');
+          api.columns(1).nodes().to$().css('min-width', '110px').css('max-width', '110px');
+          api.columns(2).nodes().to$().css('min-width', '150px').css('max-width', '150px');
+          api.columns(3).nodes().to$().css('min-width', '600px');
+          api.columns.adjust().draw();
+        }
+      ")
+    ),
+    caption = "Pre-breach leading indicator signals — May 17 to May 28"
+  ) %>%
+  formatStyle(
+    "Signal",
+    color = styleEqual(
+      c("Personal/anonymous post", "Warning in deliberating"),
+      c("#E65100", "#3266ad")
+    ),
+    fontWeight = "bold"
+  )
+```
+
+### (b) Risk creators vs Risk Flaggers
+
+**Panel 1 identifies the risk creators**: 
+* Social Media agent posted personally on May 23, the same day the embargo was informally declared, establishing the first instance of the behaviour. 
+* PR Intern and Intern followed from May 24 onwards, each posting company-positive content on personal accounts. 
+* By May 28 — one day before the breach — three agents had normalised personal posting with no consequences, no correction, and no awareness that an embargo was in force.
+
+**Panel 2 identifies the risk flaggers**:
+* Legal and Platform Trust were privately raising concerns from May 17 onwards, with warnings appearing in their deliberating field across every pre-breach round. 
+* Platform Trust's risk score climbed from 4.2/10 on May 17 to 5.8/10 on May 28 — already in the elevated zone before the breach occurred. 
+* Social Media and PR also appear as flaggers, indicating even they privately sensed the risk environment was tightening.
+
+```{r risk-split-plot, fig.width = 13, fig.height = 9}
+#| echo: false
+
+pacman::p_load(ggrepel, patchwork)
+
+# ── Panel 1: Risk CREATORS — agents posting personally pre-breach ─────────────
+p_creators <- ggplot() +
+
+  annotate("rect",
+           xmin = as.numeric(ymd_hms("2046-05-17T00:00:00")),
+           xmax = as.numeric(embargo_date),
+           ymin = -Inf, ymax = Inf,
+           fill = "#E3F2FD", alpha = 0.4) +
+  annotate("rect",
+           xmin = as.numeric(embargo_date),
+           xmax = as.numeric(breach_time),
+           ymin = -Inf, ymax = Inf,
+           fill = "#FFF3E0", alpha = 0.4) +
+
+  # personal post points
+  geom_point(
+    data  = pre_personal_posts,
+    aes(x = round_hour, y = agent_label, colour = agent_label),
+    shape = 17, size = 5, alpha = 0.85
+  ) +
+
+  # count label per agent per round
+  geom_label(
+    data  = pre_personal_posts %>%
+              count(round_hour, agent_label),
+    aes(x = round_hour, y = agent_label,
+        label = paste0("n=", n)),
+    size  = 3.5, nudge_y = 0.35,
+    label.padding = unit(0.15, "lines"),
+    show.legend = FALSE
+  ) +
+
+  # embargo and breach lines
+  geom_vline(xintercept = as.numeric(embargo_date),
+             colour = "#E65100", linetype = "dashed", linewidth = 0.8) +
+  annotate("text", x = embargo_date,
+           y = length(unique(pre_personal_posts$agent_label)) + 0.5,
+           label = "Embargo (May 23)",
+           hjust = -0.1, size = 3,
+           colour = "#E65100", fontface = "italic") +
+
+  geom_vline(xintercept = as.numeric(breach_time),
+             colour = "#B71C1C", linewidth = 1.2) +
+  annotate("text", x = breach_time,
+           y = length(unique(pre_personal_posts$agent_label)) + 0.5,
+           label = "@Elena (May 29)",
+           hjust = -0.1, size = 3,
+           colour = "#B71C1C", fontface = "bold") +
+
+  scale_colour_manual(values = agent_cols, guide = "none") +
   scale_x_datetime(date_labels = "%b %d", date_breaks = "3 days") +
   scale_y_discrete(expand = expansion(add = 0.8)) +
 
   labs(
-    title    = "Oversight gap — why prior occasions went unnoticed",
-    subtitle = paste0(
-      "Coloured bars = when each oversight mechanism was active.\n",
-      "Red triangles = risky personal posts made BEFORE compliance monitoring existed.\n",
-      "Dashed orange = embargo declared | Red solid = @Elena post | Dashed grey = Judge assigned."
-    ),
+    title    = "Panel 1 — Risk creators",
+    subtitle = "Agents posting personally before the breach (triangles = posts)",
     x = NULL, y = NULL
   ) +
-  theme_minimal(base_size = 12) +
+  theme_minimal(base_size = 11) +
   theme(
-    axis.text.x      = element_text(angle = 45, hjust = 1),
-    axis.text.y      = element_text(size = 11),
+    axis.text.x   = element_text(angle = 45, hjust = 1),
+    axis.text.y   = element_text(size = 11, face = "bold"),
+    plot.title    = element_text(size = 12, face = "bold", colour = "#B71C1C"),
+    plot.subtitle = element_text(size = 9, colour = "grey40"),
     panel.grid.minor = element_blank()
   )
+
+# ── Panel 2: Risk FLAGGERS — agents raising warnings in deliberating ──────────
+p_flaggers <- ggplot() +
+
+  annotate("rect",
+           xmin = as.numeric(ymd_hms("2046-05-17T00:00:00")),
+           xmax = as.numeric(embargo_date),
+           ymin = -Inf, ymax = Inf,
+           fill = "#E3F2FD", alpha = 0.4) +
+  annotate("rect",
+           xmin = as.numeric(embargo_date),
+           xmax = as.numeric(breach_time),
+           ymin = -Inf, ymax = Inf,
+           fill = "#FFF3E0", alpha = 0.4) +
+
+  # warning signal points
+  geom_point(
+    data  = pre_warnings,
+    aes(x = timestamp, y = agent, colour = agent),
+    shape = 18, size = 5, alpha = 0.85
+  ) +
+
+  # risk score overlay (Platform Trust only)
+  geom_point(
+    data   = pre_risk_scores,
+    aes(x  = timestamp, y = agent),
+    colour = "#1D9E75", shape = 16, size = 4
+  ) +
+  geom_label(
+    data  = pre_risk_scores,
+    aes(x = timestamp, y = agent,
+        label = paste0("Risk: ", risk_score, "/10")),
+    size  = 3.5, nudge_y = 0.4,
+    colour = "#1D9E75",
+    label.padding = unit(0.15, "lines"),
+    fill  = "white", show.legend = FALSE
+  ) +
+
+  # warning excerpt labels
+  geom_text_repel(
+    data  = pre_warnings %>%
+              mutate(short = str_trunc(excerpt, 40)),
+    aes(x = timestamp, y = agent,
+        label = short, colour = agent),
+    size         = 3.2,
+    max.overlaps = 10,
+    box.padding  = 0.5,
+    show.legend  = FALSE
+  ) +
+
+  # embargo and breach lines
+  geom_vline(xintercept = as.numeric(embargo_date),
+             colour = "#E65100", linetype = "dashed", linewidth = 0.8) +
+  annotate("text", x = embargo_date,
+           y = length(unique(pre_warnings$agent)) + 0.5,
+           label = "Embargo (May 23)",
+           hjust = -0.1, size = 4,
+           colour = "#E65100", fontface = "italic") +
+
+  geom_vline(xintercept = as.numeric(breach_time),
+             colour = "#B71C1C", linewidth = 1.2) +
+  annotate("text", x = breach_time,
+           y = length(unique(pre_warnings$agent)) + 0.5,
+           label = "@Elena (May 29)",
+           hjust = -0.1, size = 3,
+           colour = "#B71C1C", fontface = "bold") +
+
+  scale_colour_manual(values = agent_cols, guide = "none") +
+  scale_x_datetime(date_labels = "%b %d", date_breaks = "3 days") +
+  scale_y_discrete(expand = expansion(add = 0.8)) +
+
+  labs(
+    title    = "Panel 2 — Risk flaggers",
+    subtitle = "Agents raising warnings in private deliberating (diamonds = warnings, circles = risk score)",
+    x = NULL, y = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x   = element_text(angle = 45, hjust = 1, size=11),
+    axis.text.y   = element_text(size = 12, face = "bold"),
+    plot.title    = element_text(size = 14, face = "bold", colour = "#1D9E75"),
+    plot.subtitle = element_text(size = 11, colour = "grey40"),
+    panel.grid.minor = element_blank()
+  )
+
+# ── combine ───────────────────────────────────────────────────────────────────
+(p_creators / p_flaggers) +
+  plot_annotation(
+    title    = "Leading indicators — who created risk vs who flagged it",
+    subtitle = paste0(
+      "Top: agents whose personal posting behaviour created the conditions for the breach\n",
+      "Bottom: agents who privately flagged growing risk but took no formal action"
+    ),
+    theme = theme(
+      plot.title    = element_text(size = 16, face = "bold"),
+      plot.subtitle = element_text(size = 12, colour = "grey40")
+    )
+  )
 ```
+
+
 
 
 
