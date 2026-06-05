@@ -21,7 +21,15 @@ execute:
 ---
 
 ## 1 Overview
-xxx
+This analysis investigates the communications and decision-making processes surrounding an inappropriate information release at TenantThread, a fictional PropTech company in 2046. The dataset comprises 23 rounds of agent communications from May 17 to June 5, 2046 — spanning normal operations, an undeclared merger embargo, and a full crisis day.
+
+Seven AI agents communicate across six channels, from open team broadcasts to private side huddles and anonymous posts. Each message may include an internal_state field capturing private agent reasoning — providing direct evidence of the gap between declared and actual behaviour.
+
+Three questions guide the analysis: 
+
+* what caused the release (Q1)? 
+* how did agent behaviour deviate from baseline (Q2)? and 
+* were there leading indicators that went unaddressed (Q3)?
 
 ## 2 Importing libraries, understanding and processing data
 
@@ -2785,8 +2793,8 @@ p_flaggers <- ggplot() +
   )
 ```
 
-
-
-
-
 ::::
+
+## 6 Conclusion
+
+The investigation found no indication of a deliberate plan to bypass regulations. Rather it exposes a governance framework that fails to anticipate and prevent a foreseeable breach. Risk indicators shot up for nearly two weeks, warning signs piled up across several actors, and behavioural patterns appeared well before the disclosure. But these signals were segregated in discrete channels of communication, with no real escalation or enforcement mechanism. By the time @Elena’s post arrived on May 29, the system was already dysfunctional. The breach was not the result of a single mistake but the inevitable consequence of insufficient controls, informal processes and delayed oversight. The primary question for CivicLoom is whether such a governance architecture was up to the task of protecting a sensitive merger transaction. Based on the evidence that we have at this point, the answer is an unequivocal 'No'.
