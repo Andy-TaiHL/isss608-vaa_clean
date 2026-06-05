@@ -44,6 +44,8 @@ website:
             href: take-home_ex01.html
           - text: "Exercise 1 Slides"
             href: take-home_ex01_slides.html
+          - text: "Exercise 2"
+            href: take-home_ex02.html
 
 format:
   html:
