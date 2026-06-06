@@ -339,7 +339,7 @@ risk_theme_tbl
 
 ::::
 
-## 3 Visualise sequence of key events and relationships that led up to inappropriate release
+## 3 Visualise sequence of key events and relationships that led up to inappropriate release (addresses Q1)
 
 ### What this section is about
 
@@ -1362,7 +1362,7 @@ make_network_plot(
 
 ::::
 
-## 4 Evasion of embargo - step-by-step breakdown
+## 4 Evasion of embargo - step-by-step breakdown (addresses Q2)
 
 ### What this section is about
 
@@ -2347,7 +2347,7 @@ diverged_tbl %>%
 
 
 
-## 5 Leading indicators of inappropriate release
+## 5 Leading indicators of inappropriate release (addresses Q3)
 
 ### What this section is about
 
