@@ -341,13 +341,13 @@ risk_theme_tbl
 
 ## 3 Visualise sequence of key events and relationships that led up to inappropriate release
 
-In this section, we shall examine the string of key events that led to the leakage of the merger. To do so, we shall produce the following visualisations and tables:
+### What this section is about
 
-* (a) An **interactive data table** to first explore the data and find out when the **embargo was official implemented**.
-* (b) An **interactive data table** to search through various strategic keywords. This is essential for us to **build up a sequence of key events pre and post-embargo**.
-* (c) A **flow diagram** that help **visualise the sequence of events after embargo** based on the information extracted from the interactive data tables from tabs (a) and (b). 
-* (d) A **line chart** to visualise how key events, including leakage of sensitive internal information of TenantThread, has adversely impacted its stock price. This chart helps identify when the public first became aware of the issues surrounding TenantThread, leading to a loss of confidence and a subsequent sell-off of its shares. It also helps uncover the key triggers and market reactions that contributed to the decline in investor sentiment between two-week period prior to Crisis day.
-* (e) A **network graph** that examines the communications of the various agents right after embargo has been implemented. This can allow us to analyse communication patterns of the various players between embargo and crisis day. The purpose is to understand the roles of various players i.e., who are the decision makers, and who is driving the communications during that period.
+Here we look at how a combination of organisational, communication and governance failures led to the inappropriate disclosure of TenantThread’s merger plans. The individual tabs look at the details of the implementation of the embargo, key precursor events, the sequence of events leading to the breach, the effect on the stock price, and the communication patterns between the agents in the days leading up to Crisis Day.
+
+### Section summary
+
+Evidence suggests that merger disclosure was not the work of a single rogue actor. Instead, it was the culmination of a series of failures of governance and communication that preceded the breach. There was never a formal announcement of the embargo, critical information was conveyed informally, and many warning signs were missed. The weaknesses meant that sensitive merger information could flow through the organisation and was subsequently made public, leading to a loss of investor confidence.
 
 :::: {.panel-tabset}
 
@@ -580,8 +580,8 @@ datatable(
   )
 ```
 
-### (c) visualise post embargo key events
-This flow diagram illustrates the potential precursors, triggering events, and feedback mechanisms that collectively set the domino effect in motion. The information for this was obtained from viewing the interactive data tables in part (a) and (b).
+### (c) visualise key events
+This flow diagram illustrates key events, including the precursors, triggering events, feedback mechanisms, and how they collectively set the domino effect in motion. The information for this was obtained from viewing the interactive data tables in part (a) and (b).
 
 The key highlights are:
 
@@ -718,7 +718,7 @@ precursor_rounds_tbl <- all_text_tbl %>%
 
 ---
 
-#### Precursor Flow Diagram
+#### Flow Diagram
 
 *Each node is the first round a precursor signal appeared, detected from
 communications content and agent deliberating fields.
@@ -920,14 +920,21 @@ datatable(
 ```
 
 
-### (d) impact on stock Price
+### (d) impact on stock price
 
 The stock price of TenantThread between 17 May 2046 to 05 June 2046 is plotted in the line chart below. In addition, a linear projection is superimposed on the same plot, and this is based on the organic decline patterns prior to the first leak signal being detected (which was: "2046-05-25 09:00:00 UTC"). Furthermore, we also inserted the 5 key events obtained earlier in the line plot. 
 
 Collectively, the graph illustrates that TenantThead's stock price decline during the two-week period is not organic. The five key events played a major role in affecting shareholders' confidence.
 
 The details of these five key events are displayed in the table A below. The salient points are:
-* The poor showing of 
+
+* 25 May: Slowing growth, uncertain client renewals, and merger discussions signalled weakening business fundamentals.
+* 30 May: Compliance intervention and stricter embargo controls highlighted growing disclosure and governance risks.
+* 31 May: SaltWind's first article exposed data broker partnerships, triggering public scrutiny and fears of information leakage.
+* 1 June: Damage-control efforts and competitor attacks reinforced concerns that the merger was TenantThread's only viable path forward.
+* 4 June: SaltWind's second exposé on re-identification risks caused the sharpest stock decline and set the stage for the crisis day.
+
+Overall: Investor confidence eroded progressively due to deteriorating fundamentals, increasing merger dependence, disclosure concerns, and mounting privacy-related media scrutiny.
 
 #### key events on stock price
 
@@ -1353,10 +1360,23 @@ make_network_plot(
 ```
 
 
-
 ::::
 
 ## 4 Evasion of embargo - step-by-step breakdown
+
+### What this section is about
+
+This section looks at the behaviour of the agents after the introduction of the merger embargo. We employ network, text and behavioural studies to analyse communication patterns before and after the embargo, to explore private discussions and to find discrepancies between declared and real behaviour.
+
+### Section summary
+
+The evidence indicates three major behavioural changes after the embargo:
+
+* The communication went behind closed doors, with side-huddles and one-on-one conversations replacing open discussion.
+* The talks went into crisis-management mode and concentrated on legal exposure, merger risks and damage control.
+* There was a divergence between declared and real behaviour, with a number of agents, including Legal, engaged in activities conflicting with their stated actions.
+
+Overall, the embargo pushed communication into less transparent routes, reducing oversight and increasing the probability of information leaking.
 
 :::: {.panel-tabset}
 
@@ -2329,6 +2349,20 @@ diverged_tbl %>%
 
 ## 5 Leading indicators of inappropriate release
 
+### What this section is about
+
+This section details the leading indicators that preceded the improper disclosure of information about the mergers. We look at internal risk signals, warning messages and posting behaviour to identify agents who were causing risk, and those who were actively flagging it.
+
+### Section summary
+
+There were warning indicators present before the breach occurred:
+
+* **The risk score of Platform Trust rose gradually** and reached a high level one day before the breach.
+* **Legal, Platform Trust, Social Media and PR raised concerns privately** regularly but these warnings never made it up the chain successfully.
+* **After the embargo, personal posting conduct was established and normalised** among several agents, without assistance.
+* **Risk makers and risk flaggers communicated via different channels of communication**, creating a governance gap where warning signals were not impacting conduct.
+
+There were plenty of warning signs overall that could have been detected prior to the breach, but the organisation lacked an efficient way to tie risk identification to corrective action.
 
 ```{r leading-indicators-setup}
 #| include: false
@@ -2416,7 +2450,13 @@ informal_posts_tbl <- messages_tbl %>%
 
 The Platform Trust agent tracks an internal risk score within its private deliberating field, expressed as a value out of 10. This score is extracted using a regex pattern that identifies values in the form x/10. As the only agent that consistently recorded a numerical self-assessment, the score reflects its own perception of the team's accumulating exposure rather than an externally defined measure. 
 
-Here, we visualise these scores in a scatter plot over the two-week period to examine risk trends and identify potential leading signals preceding key events.
+Here, we visualise these scores in a scatter plot over the two-week period to examine risk trends and identify potential leading signals preceding key events. The following insights can be gleaned from the plot:
+
+* **The only substantive pre-breach risk signal** - is the data pertainint to Platform Trust's risk score made on May 28, one day before the breach. Its appearance just after the embargo suggests that formal risk tracking began too late.
+* **Warning signs (diamonds)** – emerge from May 17 across Legal, Platform Trust, Social Media and PR, rising in frequency post embargo. Several agents were raising concerns privately at the same time but no alert ever appeared in a formal way or made its way to the agents whose behaviour needed to alter.
+* **Personal posts (triangles)** - Only appear after May 23, 3 agents develop a posting habit in the 6-day period between embargo and violation. No interference, no correction, no penalties. 
+* **The essential gap** — alert signals pile up at one y-axis level, personal messages at another. Different agents, no connection. The visual gap between the two rows is the governance gap – the agents signalling risk and the agents generating it never met.
+
 
 #### scatter plot on leading indicator risks
 
@@ -2613,11 +2653,13 @@ bind_rows(
 ### (b) Risk creators vs Risk Flaggers
 
 **Panel 1 identifies the risk creators**: 
+
 * Social Media agent posted personally on May 23, the same day the embargo was informally declared, establishing the first instance of the behaviour. 
 * PR Intern and Intern followed from May 24 onwards, each posting company-positive content on personal accounts. 
 * By May 28 — one day before the breach — three agents had normalised personal posting with no consequences, no correction, and no awareness that an embargo was in force.
 
 **Panel 2 identifies the risk flaggers**:
+
 * Legal and Platform Trust were privately raising concerns from May 17 onwards, with warnings appearing in their deliberating field across every pre-breach round. 
 * Platform Trust's risk score climbed from 4.2/10 on May 17 to 5.8/10 on May 28 — already in the elevated zone before the breach occurred. 
 * Social Media and PR also appear as flaggers, indicating even they privately sensed the risk environment was tightening.
