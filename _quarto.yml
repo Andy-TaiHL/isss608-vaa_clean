@@ -37,6 +37,8 @@ website:
             href: hands-on_ex06a.html
           - text: "Hands-on exercise 6b: Visualising and Analysing Text Data with R: tidytext methods"
             href: hands-on_ex06b.html
+          - text: "Hands-on Exercise 7: Visualising and Analysing Time-oriented Data"
+            href: hands-on_ex07.html
 
       - text: "Take-home Exercises"        
         menu:
