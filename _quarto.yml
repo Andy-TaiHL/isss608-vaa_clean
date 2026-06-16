@@ -43,7 +43,8 @@ website:
             href: hands-on_ex08a.html
           - text: "Hands-on Exercise 8b: Visualising Geospatial Point Data"
             href: hands-on_ex08b.html
-
+          - text: "Hands-on Exercise 8c: Analytical Mapping"
+            href: hands-on_ex08c.html
             
       - text: "Take-home Exercises"        
         menu:
