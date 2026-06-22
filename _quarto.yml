@@ -45,6 +45,8 @@ website:
             href: hands-on_ex08b.html
           - text: "Hands-on Exercise 8c: Analytical Mapping"
             href: hands-on_ex08c.html
+          - text: "Hands-on Exercise 9 - Information Dashboard Design: R methods"
+            href: hands-on_ex9.html
             
       - text: "Take-home Exercises"        
         menu:
